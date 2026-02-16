@@ -5,6 +5,8 @@ export interface User {
   name: string;
   color: string;
   initials: string;
+  email?: string;
+  avatar_url?: string;
 }
 
 export interface Project {
@@ -41,9 +43,10 @@ export interface Task {
   due_at?: string;
   checkin_target_id?: string;
   created_by_id: string;
-  created_via: "app_chat" | "manual";
+  created_via: "app_chat" | "manual" | "whatsapp";
   drive_links: string[];
   notes: string[];
+  sort_order?: number;
   created_at: string;
   updated_at: string;
 }

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTasks, useFilters } from "@/lib/hooks";
-import { USERS } from "@/lib/data";
 import { Task, ViewMode } from "@/types";
+import LoginPage from "@/components/LoginPage";
 import BoardView from "@/components/BoardView";
 import ListView from "@/components/ListView";
 import MyDayView from "@/components/MyDayView";
@@ -15,13 +16,46 @@ import {
   LayoutGrid,
   List,
   Sun,
-  ChevronDown,
   FolderOpen,
+  LogOut,
 } from "lucide-react";
 
 export default function Home() {
+  return (
+    <AuthProvider>
+      <AuthGate />
+    </AuthProvider>
+  );
+}
+
+function AuthGate() {
+  const { session, currentUser, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{ background: "linear-gradient(135deg, #00BCD4 0%, #E91E63 100%)" }}
+        >
+          <span className="text-white font-black text-sm">TB</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session || !currentUser) {
+    return <LoginPage />;
+  }
+
+  return <AppShell />;
+}
+
+function AppShell() {
+  const { currentUser, signOut } = useAuth();
+  const currentUserId = currentUser!.id;
+
   const [viewMode, setViewMode] = useState<ViewMode>("board");
-  const [currentUserId, setCurrentUserId] = useState("u1"); // Jordan default
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showProjectManager, setShowProjectManager] = useState(false);
   const { tasks } = useTasks();
@@ -36,7 +70,6 @@ export default function Home() {
   } = useFilters();
 
   const filteredTasks = filterTasks(tasks);
-  const currentUser = USERS.find((u) => u.id === currentUserId)!;
 
   function handleClickCard(task: Task) {
     setSelectedTask(task);
@@ -90,7 +123,7 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Right side: Projects button + User selector */}
+          {/* Right side: Projects button + User + Sign out */}
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setShowProjectManager(true)}
@@ -100,34 +133,28 @@ export default function Home() {
               <span className="hidden sm:inline">Projects</span>
             </button>
 
-            <div className="relative hidden sm:block">
-              <select
-                value={currentUserId}
-                onChange={(e) => setCurrentUserId(e.target.value)}
-                className="appearance-none bg-gray-50 rounded-xl px-4 py-2 pr-8 text-sm font-bold text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-200"
-              >
-                {USERS.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={14}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-              />
-            </div>
+            <span className="hidden sm:inline text-sm font-bold text-gray-600">
+              {currentUser!.name}
+            </span>
+
             <div
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white font-bold text-xs cursor-pointer"
-              style={{ backgroundColor: currentUser.color }}
-              onClick={() => {
-                // Cycle through users on mobile (where dropdown is hidden)
-                const idx = USERS.findIndex((u) => u.id === currentUserId);
-                setCurrentUserId(USERS[(idx + 1) % USERS.length].id);
-              }}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white font-bold text-xs overflow-hidden"
+              style={{ backgroundColor: currentUser!.color }}
             >
-              {currentUser.initials}
+              {currentUser!.avatar_url ? (
+                <img src={currentUser!.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                currentUser!.initials
+              )}
             </div>
+
+            <button
+              onClick={signOut}
+              className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              title="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </div>
       </header>

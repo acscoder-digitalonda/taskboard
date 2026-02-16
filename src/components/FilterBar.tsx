@@ -1,7 +1,6 @@
 "use client";
 
-import { USERS } from "@/lib/data";
-import { useProjects } from "@/lib/hooks";
+import { useProjects, useUsers } from "@/lib/hooks";
 import { TaskStatus } from "@/types";
 import { STATUS_LABELS, STATUS_COLORS } from "@/lib/utils";
 import { X } from "lucide-react";
@@ -24,6 +23,7 @@ export default function FilterBar({
   setStatusFilter,
 }: FilterBarProps) {
   const { projects } = useProjects();
+  const users = useUsers();
   const hasFilters = assigneeFilter || projectFilter || statusFilter;
 
   return (
@@ -34,7 +34,7 @@ export default function FilterBar({
           Person
         </span>
         <div className="flex gap-1">
-          {USERS.map((u) => (
+          {users.map((u) => (
             <button
               key={u.id}
               onClick={() =>

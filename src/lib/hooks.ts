@@ -53,6 +53,10 @@ export function useMyDayTasks(userId: string) {
   return { top3, more, upcoming };
 }
 
+export function useUsers() {
+  return useSyncExternalStore(store.subscribeUsers, store.getUsers, store.getUsers);
+}
+
 export function useProjects() {
   const projects = useSyncExternalStore(
     store.subscribeProjects,

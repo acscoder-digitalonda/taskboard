@@ -1,8 +1,7 @@
-import { USERS } from "./data";
 import { store } from "./store";
 
 export function getUserById(id: string) {
-  return USERS.find((u) => u.id === id);
+  return store.getUsers().find((u) => u.id === id);
 }
 
 export function getProjectById(id: string | undefined) {

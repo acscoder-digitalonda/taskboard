@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { Task, TaskStatus, SECTION_PRESETS } from "@/types";
 import { store } from "@/lib/store";
-import { useProjects } from "@/lib/hooks";
-import { USERS } from "@/lib/data";
+import { useProjects, useUsers } from "@/lib/hooks";
 import {
   getUserById,
   getProjectById,
@@ -42,6 +41,7 @@ export default function TaskDetailDrawer({
   onClose,
 }: TaskDetailDrawerProps) {
   const { projects } = useProjects();
+  const users = useUsers();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
   const [editingClient, setEditingClient] = useState(false);
@@ -400,7 +400,7 @@ export default function TaskDetailDrawer({
                 }
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               >
-                {USERS.map((u) => (
+                {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>

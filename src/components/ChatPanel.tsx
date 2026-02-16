@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { parseTaskInput, store } from "@/lib/store";
-import { USERS } from "@/lib/data";
 import { getUserById, getProjectById } from "@/lib/utils";
 import { Task, TaskStatus } from "@/types";
 import {
