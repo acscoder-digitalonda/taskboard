@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTasks, useFilters } from "@/lib/hooks";
 import { Task, ViewMode } from "@/types";
@@ -8,16 +8,21 @@ import LoginPage from "@/components/LoginPage";
 import BoardView from "@/components/BoardView";
 import ListView from "@/components/ListView";
 import MyDayView from "@/components/MyDayView";
+import MessagingView from "@/components/MessagingView";
 import ChatPanel from "@/components/ChatPanel";
 import FilterBar from "@/components/FilterBar";
 import TaskDetailDrawer from "@/components/TaskDetailDrawer";
 import ProjectManager from "@/components/ProjectManager";
+import SearchPanel from "@/components/SearchPanel";
+import NotificationBell from "@/components/NotificationBell";
 import {
   LayoutGrid,
   List,
   Sun,
   FolderOpen,
   LogOut,
+  MessageSquare,
+  Search,
 } from "lucide-react";
 
 export default function Home() {
@@ -58,6 +63,7 @@ function AppShell() {
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showProjectManager, setShowProjectManager] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const { tasks } = useTasks();
   const {
     assigneeFilter,
@@ -79,6 +85,21 @@ function AppShell() {
   const drawerTask = selectedTask
     ? tasks.find((t) => t.id === selectedTask.id) || null
     : null;
+
+  // Global keyboard shortcut for search
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setShowSearch((prev) => !prev);
+      }
+      if (e.key === "Escape" && showSearch) {
+        setShowSearch(false);
+      }
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [showSearch]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -107,6 +128,7 @@ function AppShell() {
               { mode: "myday" as ViewMode, icon: Sun, label: "My Day" },
               { mode: "board" as ViewMode, icon: LayoutGrid, label: "Board" },
               { mode: "list" as ViewMode, icon: List, label: "List" },
+              { mode: "messages" as ViewMode, icon: MessageSquare, label: "Messages" },
             ].map(({ mode, icon: Icon, label }) => (
               <button
                 key={mode}
@@ -123,8 +145,25 @@ function AppShell() {
             ))}
           </div>
 
-          {/* Right side: Projects button + User + Sign out */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right side: Search + Notifications + Projects + User + Sign out */}
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {/* Search */}
+            <button
+              onClick={() => setShowSearch(true)}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-2 bg-gray-50 rounded-xl text-sm font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              title="Search (⌘K)"
+            >
+              <Search size={15} />
+              <span className="hidden md:inline text-xs">Search</span>
+              <kbd className="hidden lg:inline text-xs bg-gray-100 px-1.5 py-0.5 rounded font-mono text-gray-400">
+                ⌘K
+              </kbd>
+            </button>
+
+            {/* Notifications */}
+            <NotificationBell userId={currentUserId} />
+
+            {/* Projects */}
             <button
               onClick={() => setShowProjectManager(true)}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-gray-50 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
@@ -133,7 +172,7 @@ function AppShell() {
               <span className="hidden sm:inline">Projects</span>
             </button>
 
-            <span className="hidden sm:inline text-sm font-bold text-gray-600">
+            <span className="hidden lg:inline text-sm font-bold text-gray-600">
               {currentUser!.name}
             </span>
 
@@ -161,51 +200,58 @@ function AppShell() {
 
       {/* Main content */}
       <main className="max-w-[1600px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
-        {/* Filters (not shown on My Day) */}
-        {viewMode !== "myday" && (
-          <div className="mb-6">
-            <FilterBar
-              assigneeFilter={assigneeFilter}
-              setAssigneeFilter={setAssigneeFilter}
-              projectFilter={projectFilter}
-              setProjectFilter={setProjectFilter}
-              statusFilter={statusFilter}
-              setStatusFilter={setStatusFilter}
-            />
-          </div>
-        )}
+        {/* Messages view (full width, no chat sidebar) */}
+        {viewMode === "messages" ? (
+          <MessagingView />
+        ) : (
+          <>
+            {/* Filters (not shown on My Day) */}
+            {viewMode !== "myday" && (
+              <div className="mb-6">
+                <FilterBar
+                  assigneeFilter={assigneeFilter}
+                  setAssigneeFilter={setAssigneeFilter}
+                  projectFilter={projectFilter}
+                  setProjectFilter={setProjectFilter}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                />
+              </div>
+            )}
 
-        {/* Content area */}
-        <div className="flex gap-6">
-          {/* Main view */}
-          <div className="flex-1 min-w-0">
-            {viewMode === "board" && (
-              <BoardView
-                filteredTasks={filteredTasks}
-                onClickCard={handleClickCard}
-              />
-            )}
-            {viewMode === "list" && (
-              <ListView
-                filteredTasks={filteredTasks}
-                onClickCard={handleClickCard}
-              />
-            )}
-            {viewMode === "myday" && (
-              <MyDayView
-                userId={currentUserId}
-                onClickCard={handleClickCard}
-              />
-            )}
-          </div>
+            {/* Content area */}
+            <div className="flex gap-6">
+              {/* Main view */}
+              <div className="flex-1 min-w-0">
+                {viewMode === "board" && (
+                  <BoardView
+                    filteredTasks={filteredTasks}
+                    onClickCard={handleClickCard}
+                  />
+                )}
+                {viewMode === "list" && (
+                  <ListView
+                    filteredTasks={filteredTasks}
+                    onClickCard={handleClickCard}
+                  />
+                )}
+                {viewMode === "myday" && (
+                  <MyDayView
+                    userId={currentUserId}
+                    onClickCard={handleClickCard}
+                  />
+                )}
+              </div>
 
-          {/* Chat panel (sidebar) */}
-          <div className="w-[380px] flex-shrink-0 hidden lg:block">
-            <div className="sticky top-[90px]">
-              <ChatPanel currentUserId={currentUserId} />
+              {/* Chat panel (sidebar) — only for task views */}
+              <div className="w-[380px] flex-shrink-0 hidden lg:block">
+                <div className="sticky top-[90px]">
+                  <ChatPanel currentUserId={currentUserId} />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </main>
 
       {/* Task Detail Drawer */}
@@ -219,10 +265,29 @@ function AppShell() {
         <ProjectManager onClose={() => setShowProjectManager(false)} />
       )}
 
-      {/* Mobile chat button */}
-      <div className="lg:hidden fixed bottom-4 right-4 z-50">
-        <MobileChatButton currentUserId={currentUserId} />
-      </div>
+      {/* Search Modal */}
+      {showSearch && (
+        <SearchPanel
+          onSelectResult={(result) => {
+            setShowSearch(false);
+            if (result.type === "task") {
+              const task = tasks.find((t) => t.id === result.id);
+              if (task) setSelectedTask(task);
+            }
+            if (result.type === "channel") {
+              setViewMode("messages");
+            }
+          }}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {/* Mobile chat button (not shown on messages view) */}
+      {viewMode !== "messages" && (
+        <div className="lg:hidden fixed bottom-4 right-4 z-50">
+          <MobileChatButton currentUserId={currentUserId} />
+        </div>
+      )}
     </div>
   );
 }
