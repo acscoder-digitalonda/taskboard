@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useProjects } from "@/lib/hooks";
 import { useTasks } from "@/lib/hooks";
-import { Plus, Trash2, X, FolderOpen, Edit3, Check } from "lucide-react";
+import { Plus, Trash2, X, FolderOpen, Edit3, Check, Paperclip } from "lucide-react";
+import ProjectFileBrowser from "./ProjectFileBrowser";
 
 interface ProjectManagerProps {
   onClose: () => void;
+  currentUserId?: string;
 }
 
 const COLOR_OPTIONS = [
@@ -14,7 +16,7 @@ const COLOR_OPTIONS = [
   "#4CAF50", "#2196F3", "#FF9800", "#795548", "#607D8B",
 ];
 
-export default function ProjectManager({ onClose }: ProjectManagerProps) {
+export default function ProjectManager({ onClose, currentUserId }: ProjectManagerProps) {
   const { projects, addProject, updateProject, deleteProject } = useProjects();
   const { tasks } = useTasks();
   const [newName, setNewName] = useState("");
@@ -22,6 +24,7 @@ export default function ProjectManager({ onClose }: ProjectManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [browsingProjectId, setBrowsingProjectId] = useState<string | null>(null);
 
   function handleAdd() {
     if (!newName.trim()) return;
@@ -130,6 +133,13 @@ export default function ProjectManager({ onClose }: ProjectManagerProps) {
                 {editingId !== project.id && (
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
+                      onClick={() => setBrowsingProjectId(project.id)}
+                      className="p-1.5 rounded-lg hover:bg-cyan-50 text-gray-400 hover:text-cyan-600 transition-colors"
+                      title="Files"
+                    >
+                      <Paperclip size={14} />
+                    </button>
+                    <button
                       onClick={() => startEdit(project.id, project.name)}
                       className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
                       title="Rename"
@@ -213,6 +223,21 @@ export default function ProjectManager({ onClose }: ProjectManagerProps) {
           </div>
         </div>
       </div>
+
+      {/* Project File Browser */}
+      {browsingProjectId && currentUserId && (() => {
+        const proj = projects.find((p) => p.id === browsingProjectId);
+        if (!proj) return null;
+        return (
+          <ProjectFileBrowser
+            projectId={proj.id}
+            projectName={proj.name}
+            projectColor={proj.color}
+            currentUserId={currentUserId}
+            onClose={() => setBrowsingProjectId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

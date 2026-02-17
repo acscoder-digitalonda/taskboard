@@ -2,6 +2,7 @@
 
 import { Task, TaskStatus, Project, TaskSection, User } from "@/types";
 import { supabase } from "./supabase";
+import { deleteProjectFiles } from "./files";
 
 type Listener = () => void;
 
@@ -565,7 +566,15 @@ export const store = {
     emitTasks();
 
     (async () => {
-      // Clear project_id on associated tasks first
+      // Delete all files belonging to this project from storage + DB
+      try {
+        const deletedCount = await deleteProjectFiles(id);
+        if (deletedCount > 0) console.log(`Cleaned up ${deletedCount} project files`);
+      } catch (err) {
+        console.error("Error cleaning up project files:", err);
+      }
+
+      // Clear project_id on associated tasks
       const { error: taskError } = await supabase
         .from("tasks")
         .update({ project_id: null })

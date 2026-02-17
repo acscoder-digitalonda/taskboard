@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Task, TaskStatus, SECTION_PRESETS } from "@/types";
+import { useState, useEffect, useCallback } from "react";
+import { Task, TaskStatus, SECTION_PRESETS, FileAttachment } from "@/types";
 import { store } from "@/lib/store";
 import { useProjects, useUsers } from "@/lib/hooks";
 import {
@@ -29,16 +29,22 @@ import {
   Save,
   ChevronDown,
   Layers,
+  Paperclip,
 } from "lucide-react";
+import { getTaskFiles, deleteFile } from "@/lib/files";
+import FileUploadZone from "./FileUploadZone";
+import FileList from "./FileList";
 
 interface TaskDetailDrawerProps {
   task: Task | null;
   onClose: () => void;
+  currentUserId?: string;
 }
 
 export default function TaskDetailDrawer({
   task,
   onClose,
+  currentUserId,
 }: TaskDetailDrawerProps) {
   const { projects } = useProjects();
   const users = useUsers();
@@ -53,6 +59,32 @@ export default function TaskDetailDrawer({
   const [newSectionContent, setNewSectionContent] = useState("");
   const [newNote, setNewNote] = useState("");
   const [newLink, setNewLink] = useState("");
+  const [taskFiles, setTaskFiles] = useState<FileAttachment[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+
+  // Load files when task changes
+  useEffect(() => {
+    if (task?.id) {
+      setLoadingFiles(true);
+      getTaskFiles(task.id)
+        .then((files) => setTaskFiles(files))
+        .catch(() => setTaskFiles([]))
+        .finally(() => setLoadingFiles(false));
+    } else {
+      setTaskFiles([]);
+    }
+  }, [task?.id]);
+
+  const handleFileUploaded = useCallback((attachment: FileAttachment) => {
+    setTaskFiles((prev) => [attachment, ...prev]);
+  }, []);
+
+  const handleFileDelete = useCallback(async (file: FileAttachment) => {
+    const success = await deleteFile(file.id, file.storage_path);
+    if (success) {
+      setTaskFiles((prev) => prev.filter((f) => f.id !== file.id));
+    }
+  }, []);
 
   if (!task) return null;
 
@@ -566,12 +598,52 @@ export default function TaskDetailDrawer({
           {/* ── Divider ── */}
           <div className="border-t border-gray-100" />
 
+          {/* ── File Attachments ── */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Paperclip size={14} className="text-gray-400" />
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                Files
+              </span>
+              <span className="text-xs text-gray-300 font-semibold">
+                ({taskFiles.length})
+              </span>
+            </div>
+
+            {loadingFiles ? (
+              <div className="text-xs text-gray-300 py-3 text-center">
+                Loading files...
+              </div>
+            ) : (
+              <FileList
+                files={taskFiles}
+                onDelete={handleFileDelete}
+                compact
+                emptyMessage="No files attached"
+              />
+            )}
+
+            {currentUserId && (
+              <div className="mt-3">
+                <FileUploadZone
+                  uploadedBy={currentUserId}
+                  taskId={task.id}
+                  projectId={task.project_id}
+                  onUploadComplete={handleFileUploaded}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* ── Divider ── */}
+          <div className="border-t border-gray-100" />
+
           {/* ── Drive Links ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Link2 size={14} className="text-gray-400" />
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Links / Files
+                Links
               </span>
               <span className="text-xs text-gray-300 font-semibold">
                 ({task.drive_links.length})

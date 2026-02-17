@@ -153,6 +153,17 @@ export interface FileAttachment {
   url?: string;
 }
 
+export interface FileUploadProgress {
+  file: File;
+  tempId: string;
+  name: string;
+  size: number;
+  percent: number; // 0-100
+  status: "pending" | "uploading" | "complete" | "error";
+  error?: string;
+  attachment?: FileAttachment;
+}
+
 // ============================================
 // Notification Types
 // ============================================

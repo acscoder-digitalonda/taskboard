@@ -270,11 +270,12 @@ function AppShell() {
       <TaskDetailDrawer
         task={drawerTask}
         onClose={() => setSelectedTask(null)}
+        currentUserId={currentUserId}
       />
 
       {/* Project Manager Modal */}
       {showProjectManager && (
-        <ProjectManager onClose={() => setShowProjectManager(false)} />
+        <ProjectManager onClose={() => setShowProjectManager(false)} currentUserId={currentUserId} />
       )}
 
       {/* Search Modal */}

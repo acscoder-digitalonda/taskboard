@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useMessages, useChannelMembers } from "@/lib/messaging-hooks";
 import { useUsers } from "@/lib/hooks";
-import { uploadFile } from "@/lib/files";
-import { Message, User } from "@/types";
+import { uploadFile, formatFileSize, getFileIconName, getFileUrl } from "@/lib/files";
+import { Message, User, FileAttachment } from "@/types";
 import {
   ArrowLeft,
   Send,
@@ -20,6 +20,15 @@ import {
   ChevronUp,
   Search,
   X,
+  File as FileIcon,
+  Image,
+  Video,
+  Music,
+  FileText,
+  FileCode2,
+  Archive,
+  Download,
+  Loader2,
 } from "lucide-react";
 
 interface ChannelChatProps {
@@ -88,20 +97,45 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
     }
   };
 
+  const [uploading, setUploading] = useState(false);
+  const [uploadingNames, setUploadingNames] = useState<string[]>([]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const attachment = await uploadFile(file, {
-      uploadedBy: userId,
-      channelId,
-    });
+    setUploading(true);
+    const names = Array.from(files).map((f) => f.name);
+    setUploadingNames(names);
 
-    if (attachment) {
-      await sendMessage(`📎 ${file.name}`, undefined);
+    for (const file of Array.from(files)) {
+      try {
+        const attachment = await uploadFile(file, {
+          uploadedBy: userId,
+          channelId,
+        });
+
+        if (attachment) {
+          // Send message with file metadata encoded in a recognizable format
+          const sizeStr = formatFileSize(attachment.size_bytes);
+          const meta = JSON.stringify({
+            fileId: attachment.id,
+            fileName: attachment.name,
+            mimeType: attachment.mime_type,
+            sizeBytes: attachment.size_bytes,
+            storagePath: attachment.storage_path,
+          });
+          await sendMessage(`📎 ${file.name} (${sizeStr})\n__file:${meta}`, undefined);
+        }
+      } catch (err) {
+        console.error("File upload failed:", file.name, err);
+      }
+      // Remove from uploading list as each completes
+      setUploadingNames((prev) => prev.filter((n) => n !== file.name));
     }
 
-    // Reset input
+    setUploading(false);
+    setUploadingNames([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -271,6 +305,17 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
         </div>
       )}
 
+      {/* Upload progress */}
+      {uploading && uploadingNames.length > 0 && (
+        <div className="px-4 py-2 bg-cyan-50 border-t border-cyan-100 flex items-center gap-2">
+          <Loader2 size={14} className="text-cyan-500 animate-spin flex-shrink-0" />
+          <p className="text-xs text-cyan-700 truncate flex-1">
+            Uploading {uploadingNames[0]}
+            {uploadingNames.length > 1 && ` +${uploadingNames.length - 1} more`}
+          </p>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="px-4 py-3 border-t border-gray-100 bg-white">
         <div className="flex items-end gap-2">
@@ -284,6 +329,7 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             className="hidden"
             onChange={handleFileUpload}
           />
@@ -434,12 +480,7 @@ function MessageBubble({
           </div>
         ) : (
           <div className="relative">
-            <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
-              {message.body}
-              {message.edited_at && (
-                <span className="text-xs text-gray-400 ml-1">(edited)</span>
-              )}
-            </p>
+            <FileAwareMessage body={message.body} editedAt={message.edited_at || null} />
           </div>
         )}
       </div>
@@ -481,6 +522,128 @@ function MessageBubble({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---- File-Aware Message Body ----
+
+const FILE_ICON_MAP: Record<string, React.ComponentType<{ size: number; className?: string }>> = {
+  File: FileIcon,
+  Image,
+  Video,
+  Music,
+  FileText,
+  Sheet: FileText,
+  Presentation: FileText,
+  Archive,
+  FileCode: FileCode2,
+};
+
+function FileAwareMessage({
+  body,
+  editedAt,
+}: {
+  body: string;
+  editedAt: string | null;
+}) {
+  // Check if message contains an embedded file reference
+  const fileMatch = body.match(/__file:(\{[\s\S]*\})$/);
+
+  if (fileMatch) {
+    try {
+      const fileMeta = JSON.parse(fileMatch[1]);
+      return (
+        <div>
+          <FileCard
+            fileName={fileMeta.fileName}
+            mimeType={fileMeta.mimeType}
+            sizeBytes={fileMeta.sizeBytes}
+            storagePath={fileMeta.storagePath}
+          />
+          {editedAt && (
+            <span className="text-xs text-gray-400 ml-1">(edited)</span>
+          )}
+        </div>
+      );
+    } catch {
+      // Fall through to regular display
+    }
+  }
+
+  // Regular message (or legacy 📎 format)
+  return (
+    <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+      {body}
+      {editedAt && (
+        <span className="text-xs text-gray-400 ml-1">(edited)</span>
+      )}
+    </p>
+  );
+}
+
+// ---- Inline File Card ----
+
+function FileCard({
+  fileName,
+  mimeType,
+  sizeBytes,
+  storagePath,
+}: {
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  storagePath: string;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const iconName = getFileIconName(mimeType);
+  const IconComp = FILE_ICON_MAP[iconName] || FileIcon;
+
+  const iconBgColors: Record<string, string> = {
+    Image: "bg-pink-50 text-pink-500",
+    Video: "bg-purple-50 text-purple-500",
+    Music: "bg-orange-50 text-orange-500",
+    FileText: "bg-blue-50 text-blue-500",
+    Sheet: "bg-green-50 text-green-500",
+    Archive: "bg-yellow-50 text-yellow-600",
+    FileCode: "bg-gray-100 text-gray-500",
+    File: "bg-gray-50 text-gray-400",
+  };
+  const bgClass = iconBgColors[iconName] || iconBgColors.File;
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const url = await getFileUrl(storagePath);
+      if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={handleDownload}
+      className="inline-flex items-center gap-3 p-3 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-100 cursor-pointer transition-colors max-w-xs"
+    >
+      <div
+        className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${bgClass}`}
+      >
+        <IconComp size={18} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-700 truncate">{fileName}</p>
+        <p className="text-xs text-gray-400">{formatFileSize(sizeBytes)}</p>
+      </div>
+      <div className="flex-shrink-0">
+        {downloading ? (
+          <Loader2 size={14} className="text-cyan-500 animate-spin" />
+        ) : (
+          <Download size={14} className="text-gray-300" />
+        )}
+      </div>
     </div>
   );
 }
