@@ -8,13 +8,17 @@ import {
   Send,
   Bot,
   User,
-  Edit3,
   Check,
   X,
   MessageSquare,
   ChevronDown,
   ChevronUp,
+  Bell,
+  Phone,
+  BellOff,
 } from "lucide-react";
+
+type NotifyLevel = "in_app" | "whatsapp" | "none";
 
 interface ChatMessage {
   id: string;
@@ -37,6 +41,8 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
   ]);
   const [input, setInput] = useState("");
   const [pendingTask, setPendingTask] = useState<Partial<Task> | null>(null);
+  const [notifyLevel, setNotifyLevel] = useState<NotifyLevel>("in_app");
+  const [isCreating, setIsCreating] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -70,11 +76,14 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
 
     setMessages((prev) => [...prev, userMsg, botMsg]);
     setPendingTask(parsed);
+    // Default to whatsapp if assigning to someone else
+    setNotifyLevel(parsed.assignee_id !== currentUserId ? "whatsapp" : "in_app");
     setInput("");
   }
 
-  function handleCreate() {
-    if (!pendingTask) return;
+  async function handleCreate() {
+    if (!pendingTask || isCreating) return;
+    setIsCreating(true);
 
     const task = store.addTask({
       title: pendingTask.title || "Untitled task",
@@ -91,16 +100,44 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
       checkin_target_id: pendingTask.checkin_target_id,
     });
 
+    const assignee = getUserById(task.assignee_id);
+    const assigneeName = assignee?.name || "Unknown";
+
+    // Send notification based on selected level
+    if (notifyLevel !== "none" && task.assignee_id !== currentUserId) {
+      try {
+        await fetch("/api/notifications/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: task.assignee_id,
+            type: "task_assigned",
+            title: `New task from ${getUserById(currentUserId)?.name || "someone"}`,
+            body: task.title,
+            link: `/tasks/${task.id}`,
+            reference_id: task.id,
+            reference_type: "task",
+            send_whatsapp: notifyLevel === "whatsapp",
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to send notification:", err);
+      }
+    }
+
+    let notifyLabel = "";
+    if (notifyLevel === "whatsapp") notifyLabel = " 📱 WhatsApp notified.";
+    else if (notifyLevel === "in_app") notifyLabel = " 🔔 In-app notification sent.";
+
     const confirmMsg: ChatMessage = {
       id: "confirm-" + Date.now(),
       role: "bot",
-      text: `✅ Created "${task.title}" and assigned to ${
-        getUserById(task.assignee_id)?.name
-      }. Ready for another!`,
+      text: `✅ Created "${task.title}" and assigned to ${assigneeName}.${notifyLabel} Ready for another!`,
     };
 
     setMessages((prev) => [...prev, confirmMsg]);
     setPendingTask(null);
+    setIsCreating(false);
   }
 
   function handleCancel() {
@@ -205,22 +242,54 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
                       </div>
 
                       {pendingTask && (
-                        <div className="flex gap-2 pt-2 border-t border-gray-100">
-                          <button
-                            onClick={handleCreate}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-cyan-500 text-white text-xs font-bold rounded-lg hover:bg-cyan-600 transition-colors"
-                          >
-                            <Check size={12} />
-                            Create
-                          </button>
-                          <button
-                            onClick={handleCancel}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors"
-                          >
-                            <X size={12} />
-                            Cancel
-                          </button>
-                        </div>
+                        <>
+                          {/* Notification level selector */}
+                          {pendingTask.assignee_id !== currentUserId && (
+                            <div className="pt-2 border-t border-gray-100">
+                              <p className="text-xs font-semibold text-gray-500 mb-1.5">
+                                Notify assignee:
+                              </p>
+                              <div className="flex gap-1">
+                                {([
+                                  { level: "whatsapp" as NotifyLevel, icon: Phone, label: "WhatsApp", color: "bg-green-50 text-green-700 border-green-200" },
+                                  { level: "in_app" as NotifyLevel, icon: Bell, label: "In-app", color: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+                                  { level: "none" as NotifyLevel, icon: BellOff, label: "None", color: "bg-gray-50 text-gray-500 border-gray-200" },
+                                ]).map(({ level, icon: Icon, label, color }) => (
+                                  <button
+                                    key={level}
+                                    onClick={() => setNotifyLevel(level)}
+                                    className={`flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg border transition-all ${
+                                      notifyLevel === level
+                                        ? `${color} ring-2 ring-offset-1 ${level === "whatsapp" ? "ring-green-300" : level === "in_app" ? "ring-cyan-300" : "ring-gray-300"}`
+                                        : "bg-white text-gray-400 border-gray-100 hover:border-gray-200"
+                                    }`}
+                                  >
+                                    <Icon size={11} />
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 pt-2 border-t border-gray-100">
+                            <button
+                              onClick={handleCreate}
+                              disabled={isCreating}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-cyan-500 text-white text-xs font-bold rounded-lg hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+                            >
+                              <Check size={12} />
+                              {isCreating ? "Creating..." : "Create"}
+                            </button>
+                            <button
+                              onClick={handleCancel}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              <X size={12} />
+                              Cancel
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   )}

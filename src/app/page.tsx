@@ -33,8 +33,16 @@ export default function Home() {
   );
 }
 
+// DEV_BYPASS: Temporarily skip auth for preview. Remove when Google Auth is configured.
+const DEV_BYPASS_AUTH = true;
+
 function AuthGate() {
   const { session, currentUser, isLoading } = useAuth();
+
+  // --- Dev bypass: skip login, use seed user "Jordan" ---
+  if (DEV_BYPASS_AUTH) {
+    return <AppShell />;
+  }
 
   if (isLoading) {
     return (
@@ -58,7 +66,11 @@ function AuthGate() {
 
 function AppShell() {
   const { currentUser, signOut } = useAuth();
-  const currentUserId = currentUser!.id;
+  // DEV_BYPASS: fallback user when auth is bypassed (use real DB UUID)
+  const devUser = DEV_BYPASS_AUTH && !currentUser
+    ? { id: "9ccc8eb5-7690-49c3-8f42-c09f083e6c37", name: "Jordan Howard", color: "#00BCD4", initials: "JH", email: "jordan@digitalonda.com" }
+    : currentUser;
+  const currentUserId = devUser!.id;
 
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -173,17 +185,17 @@ function AppShell() {
             </button>
 
             <span className="hidden lg:inline text-sm font-bold text-gray-600">
-              {currentUser!.name}
+              {devUser!.name}
             </span>
 
             <div
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white font-bold text-xs overflow-hidden"
-              style={{ backgroundColor: currentUser!.color }}
+              style={{ backgroundColor: devUser!.color }}
             >
-              {currentUser!.avatar_url ? (
-                <img src={currentUser!.avatar_url} alt="" className="w-full h-full object-cover" />
+              {devUser!.avatar_url ? (
+                <img src={devUser!.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
-                currentUser!.initials
+                devUser!.initials
               )}
             </div>
 
