@@ -88,6 +88,38 @@ async function fetchOrUpsertPublicUser(session: Session): Promise<User | null> {
   return null;
 }
 
+// DEV_BYPASS: Same flag as page.tsx. When true, use fallback user from DB.
+const DEV_BYPASS_AUTH = true;
+const DEV_BYPASS_USER_ID = "9ccc8eb5-7690-49c3-8f42-c09f083e6c37";
+
+async function fetchDevBypassUser(): Promise<User | null> {
+  const { data } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", DEV_BYPASS_USER_ID)
+    .single();
+
+  if (data) {
+    return {
+      id: data.id,
+      name: data.name,
+      color: data.color,
+      initials: data.initials,
+      email: data.email,
+      avatar_url: data.avatar_url,
+    };
+  }
+
+  // Hardcoded fallback if DB is unreachable
+  return {
+    id: DEV_BYPASS_USER_ID,
+    name: "Jordan Howard",
+    color: "#00BCD4",
+    initials: "JH",
+    email: "jordan@digitalonda.com",
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -98,6 +130,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       if (session?.user) {
         fetchOrUpsertPublicUser(session).then((user) => {
+          setCurrentUser(user);
+          setIsLoading(false);
+        });
+      } else if (DEV_BYPASS_AUTH) {
+        // Dev bypass: load dev user from DB when there's no real session
+        fetchDevBypassUser().then((user) => {
           setCurrentUser(user);
           setIsLoading(false);
         });
