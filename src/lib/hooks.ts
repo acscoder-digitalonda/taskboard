@@ -48,7 +48,7 @@ export function useMyDayTasks(userId: string) {
         t.due_at &&
         new Date(t.due_at) > today
     )
-    .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime());
+    .sort((a, b) => new Date(a.due_at || 0).getTime() - new Date(b.due_at || 0).getTime());
 
   return { top3, more, upcoming };
 }

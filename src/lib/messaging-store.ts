@@ -39,8 +39,11 @@ async function fetchChannels(userId: string): Promise<Channel[]> {
     .select("channel_id, last_read_at")
     .eq("user_id", userId);
 
-  if (memErr || !memberRows?.length) {
+  if (memErr) {
     console.error("Error fetching channel memberships:", memErr);
+    return [];
+  }
+  if (!memberRows?.length) {
     return [];
   }
 
@@ -284,9 +287,14 @@ let initUserId: string | null = null;
 async function initMessaging(userId: string) {
   if (initUserId === userId) return;
   initUserId = userId;
-  channels = await fetchChannels(userId);
-  emitChannels();
-  setupChannelRealtime(userId);
+  try {
+    channels = await fetchChannels(userId);
+    emitChannels();
+    setupChannelRealtime(userId);
+  } catch (err) {
+    console.error("Failed to init messaging:", err);
+    initUserId = null; // Allow retry
+  }
 }
 
 // ---- Store API ----
@@ -298,7 +306,9 @@ export const messagingStore = {
 
   subscribeChannels: (fn: Listener, userId: string) => {
     channelListeners.add(fn);
-    initMessaging(userId);
+    initMessaging(userId).catch((err) =>
+      console.error("Failed to init messaging:", err)
+    );
     return () => channelListeners.delete(fn);
   },
 

@@ -156,17 +156,22 @@ async function initStore() {
   if (initialized || initializing) return;
   initializing = true;
 
-  const [fetchedTasks, fetchedProjects, fetchedUsers] = await Promise.all([fetchTasks(), fetchProjects(), fetchUsers()]);
-  tasks = fetchedTasks;
-  projects = fetchedProjects;
-  users = fetchedUsers;
-  initialized = true;
-  initializing = false;
+  try {
+    const [fetchedTasks, fetchedProjects, fetchedUsers] = await Promise.all([fetchTasks(), fetchProjects(), fetchUsers()]);
+    tasks = fetchedTasks;
+    projects = fetchedProjects;
+    users = fetchedUsers;
+    initialized = true;
 
-  emitTasks();
-  emitProjects();
-  emitUsers();
-  setupRealtime();
+    emitTasks();
+    emitProjects();
+    emitUsers();
+    setupRealtime();
+  } catch (err) {
+    console.error("Failed to initialize store:", err);
+  } finally {
+    initializing = false;
+  }
 }
 
 // ---- Store API ----
@@ -177,7 +182,7 @@ export const store = {
 
   subscribe: (fn: Listener) => {
     taskListeners.add(fn);
-    initStore();
+    initStore().catch((err) => console.error("Failed to init store:", err));
     return () => taskListeners.delete(fn);
   },
 
@@ -490,7 +495,7 @@ export const store = {
 
   subscribeProjects: (fn: Listener) => {
     projectListeners.add(fn);
-    initStore();
+    initStore().catch((err) => console.error("Failed to init store:", err));
     return () => projectListeners.delete(fn);
   },
 
@@ -551,7 +556,7 @@ export const store = {
 
   subscribeUsers: (fn: Listener) => {
     userListeners.add(fn);
-    initStore();
+    initStore().catch((err) => console.error("Failed to init store:", err));
     return () => userListeners.delete(fn);
   },
 

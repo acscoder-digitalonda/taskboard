@@ -67,7 +67,7 @@ export function useChannelMembers(channelId: string | null) {
       setMembers([]);
       return;
     }
-    messagingStore.getChannelMembers(channelId).then(setMembers);
+    messagingStore.getChannelMembers(channelId).then(setMembers).catch(() => setMembers([]));
   }, [channelId]);
 
   return members;

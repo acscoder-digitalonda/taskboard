@@ -255,9 +255,10 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
               const sender = msg.sender_id ? userMap.get(msg.sender_id) : null;
               const prevMsg = idx > 0 ? dayMsgs[idx - 1] : null;
               const isSameAuthor =
-                prevMsg?.sender_id === msg.sender_id &&
+                prevMsg != null &&
+                prevMsg.sender_id === msg.sender_id &&
                 new Date(msg.created_at).getTime() -
-                  new Date(prevMsg!.created_at).getTime() <
+                  new Date(prevMsg.created_at).getTime() <
                   300000; // 5 min
 
               return (

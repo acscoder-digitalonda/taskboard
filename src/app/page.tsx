@@ -34,27 +34,33 @@ export default function Home() {
 }
 
 // DEV_BYPASS: Temporarily skip auth for preview. Remove when Google Auth is configured.
-const DEV_BYPASS_AUTH = true;
+const DEV_BYPASS_AUTH = false;
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <div
+        className="w-10 h-10 rounded-xl flex items-center justify-center"
+        style={{ background: "linear-gradient(135deg, #00BCD4 0%, #E91E63 100%)" }}
+      >
+        <span className="text-white font-black text-sm">TB</span>
+      </div>
+    </div>
+  );
+}
 
 function AuthGate() {
   const { session, currentUser, isLoading } = useAuth();
 
-  // --- Dev bypass: skip login, use seed user "Jordan" ---
-  if (DEV_BYPASS_AUTH) {
-    return <AppShell />;
+  // Always wait for auth to finish loading (incl. dev bypass user resolution)
+  if (isLoading) {
+    return <LoadingScreen />;
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center"
-          style={{ background: "linear-gradient(135deg, #00BCD4 0%, #E91E63 100%)" }}
-        >
-          <span className="text-white font-black text-sm">TB</span>
-        </div>
-      </div>
-    );
+  // Dev bypass: skip login check, but still need currentUser resolved
+  if (DEV_BYPASS_AUTH) {
+    if (!currentUser) return <LoadingScreen />;
+    return <AppShell />;
   }
 
   if (!session || !currentUser) {
@@ -66,11 +72,9 @@ function AuthGate() {
 
 function AppShell() {
   const { currentUser, signOut } = useAuth();
-  // DEV_BYPASS: fallback user when auth is bypassed (use real DB UUID)
-  const devUser = DEV_BYPASS_AUTH && !currentUser
-    ? { id: "9ccc8eb5-7690-49c3-8f42-c09f083e6c37", name: "Jordan Howard", color: "#00BCD4", initials: "JH", email: "jordan@digitalonda.com" }
-    : currentUser;
-  const currentUserId = devUser!.id;
+  // currentUser is guaranteed non-null by AuthGate before AppShell renders
+  const user = currentUser!;
+  const currentUserId = user.id;
 
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -185,17 +189,17 @@ function AppShell() {
             </button>
 
             <span className="hidden lg:inline text-sm font-bold text-gray-600">
-              {devUser!.name}
+              {user.name}
             </span>
 
             <div
               className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white font-bold text-xs overflow-hidden"
-              style={{ backgroundColor: devUser!.color }}
+              style={{ backgroundColor: user.color }}
             >
-              {devUser!.avatar_url ? (
-                <img src={devUser!.avatar_url} alt="" className="w-full h-full object-cover" />
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
-                devUser!.initials
+                user.initials
               )}
             </div>
 

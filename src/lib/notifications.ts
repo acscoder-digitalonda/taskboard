@@ -78,10 +78,15 @@ let initUserId: string | null = null;
 async function initNotifications(userId: string) {
   if (initUserId === userId) return;
   initUserId = userId;
-  notifications = await fetchNotifications(userId);
-  unreadCount = notifications.filter((n) => !n.read_at).length;
-  emit();
-  setupNotifRealtime(userId);
+  try {
+    notifications = await fetchNotifications(userId);
+    unreadCount = notifications.filter((n) => !n.read_at).length;
+    emit();
+    setupNotifRealtime(userId);
+  } catch (err) {
+    console.error("Failed to init notifications:", err);
+    initUserId = null; // Allow retry
+  }
 }
 
 // ---- Store ----
@@ -92,7 +97,9 @@ export const notificationStore = {
 
   subscribe: (fn: Listener, userId: string) => {
     listeners.add(fn);
-    initNotifications(userId);
+    initNotifications(userId).catch((err) =>
+      console.error("Failed to init notifications:", err)
+    );
     return () => listeners.delete(fn);
   },
 
