@@ -5,6 +5,7 @@ import { supabase } from "./supabase";
 import { deleteProjectFiles } from "./files";
 
 type Listener = () => void;
+type ErrorListener = (message: string) => void;
 
 let tasks: Task[] = [];
 let projects: Project[] = [];
@@ -14,6 +15,18 @@ let initializing = false;
 const taskListeners: Set<Listener> = new Set();
 const projectListeners: Set<Listener> = new Set();
 const userListeners: Set<Listener> = new Set();
+
+// C4: Error notification system for failed mutations
+const errorListeners: Set<ErrorListener> = new Set();
+export const storeErrorEmitter = {
+  emit: (message: string) => {
+    errorListeners.forEach((fn) => fn(message));
+  },
+  subscribe: (fn: ErrorListener) => {
+    errorListeners.add(fn);
+    return () => { errorListeners.delete(fn); };
+  },
+};
 
 function emitTasks() {
   taskListeners.forEach((fn) => fn());
@@ -225,6 +238,7 @@ export const store = {
         console.error("Error inserting task:", error);
         tasks = tasks.filter((t) => t.id !== tempId);
         emitTasks();
+        storeErrorEmitter.emit("Failed to create task");
         return;
       }
 
@@ -276,6 +290,7 @@ export const store = {
             tasks = tasks.map((t) => (t.id === id ? prev : t));
             emitTasks();
           }
+          storeErrorEmitter.emit("Failed to save task changes");
         }
       }
     })();
@@ -301,6 +316,7 @@ export const store = {
           tasks = tasks.map((t) => (t.id === id ? prev : t));
           emitTasks();
         }
+        storeErrorEmitter.emit("Failed to move task");
       }
     })();
   },
@@ -318,6 +334,7 @@ export const store = {
           tasks = [...tasks, prev];
           emitTasks();
         }
+        storeErrorEmitter.emit("Failed to delete task");
       }
     })();
   },
@@ -328,8 +345,16 @@ export const store = {
 
     (async () => {
       const updates = reordered.map((t, i) => ({ id: t.id, sort_order: i }));
-      for (const u of updates) {
-        await supabase.from("tasks").update({ sort_order: u.sort_order }).eq("id", u.id);
+      // C3: Batch all updates in parallel instead of sequential awaits
+      const results = await Promise.all(
+        updates.map((u) =>
+          supabase.from("tasks").update({ sort_order: u.sort_order }).eq("id", u.id)
+        )
+      );
+      const errors = results.filter((r) => r.error);
+      if (errors.length > 0) {
+        console.error(`Error reordering tasks: ${errors.length} failures`, errors[0].error);
+        storeErrorEmitter.emit("Failed to save task order");
       }
     })();
   },
@@ -519,6 +544,7 @@ export const store = {
         console.error("Error inserting project:", error);
         projects = projects.filter((p) => p.id !== tempId);
         emitProjects();
+        storeErrorEmitter.emit("Failed to create project");
         return;
       }
       projects = projects.map((p) => (p.id === tempId ? { ...p, id: data.id } : p));
@@ -547,6 +573,7 @@ export const store = {
           projects = projects.map((p) => (p.id === id ? prev : p));
           emitProjects();
         }
+        storeErrorEmitter.emit("Failed to update project");
       }
     })();
   },
@@ -596,6 +623,7 @@ export const store = {
         tasks = prevTasks;
         emitProjects();
         emitTasks();
+        storeErrorEmitter.emit("Failed to delete project");
       }
     })();
   },
@@ -649,6 +677,11 @@ export function parseTaskInput(input: string): Partial<Task> {
     .replace(/,\s*,/g, ",")
     .replace(/\s+/g, " ")
     .trim();
+
+  // H5: Validate title is non-empty after stripping parsed patterns
+  if (!result.title) {
+    result.title = text; // Fall back to original input
+  }
 
   return result;
 }

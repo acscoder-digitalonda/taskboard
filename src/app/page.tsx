@@ -15,6 +15,7 @@ import TaskDetailDrawer from "@/components/TaskDetailDrawer";
 import ProjectManager from "@/components/ProjectManager";
 import SearchPanel from "@/components/SearchPanel";
 import NotificationBell from "@/components/NotificationBell";
+import Toast from "@/components/Toast";
 import {
   LayoutGrid,
   List,
@@ -310,6 +311,9 @@ function AppShell() {
           <MobileChatButton currentUserId={currentUserId} />
         </div>
       )}
+
+      {/* Error toast notifications */}
+      <Toast />
     </div>
   );
 }
