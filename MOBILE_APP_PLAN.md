@@ -474,3 +474,525 @@ OTA Updates (JS-only changes):
 - ⏳ File upload from camera/gallery
 - ⏳ Notification preferences
 - ⏳ Widget (iOS/Android) for My Day tasks
+
+---
+
+## Implementation Guide — Step by Step
+
+### Step 1: Monorepo Setup (Day 1-2)
+
+Run these commands from the existing `taskboard/` root:
+
+```bash
+# 1. Install Turborepo
+npm install -D turbo
+
+# 2. Create workspace structure
+mkdir -p packages/shared/src/{types,store,utils,hooks,supabase}
+mkdir -p apps/mobile
+
+# 3. Move existing Next.js app into apps/web
+mkdir -p apps/web
+git mv src apps/web/src
+git mv public apps/web/public
+git mv next.config.ts apps/web/
+git mv tsconfig.json apps/web/
+git mv postcss.config.mjs apps/web/
+# Keep package.json at root as workspace root
+
+# 4. Create workspace root package.json
+# (replaces existing — see template below)
+```
+
+**Root `package.json`**:
+```json
+{
+  "name": "taskboard",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.x",
+    "typescript": "^5.9"
+  }
+}
+```
+
+**`turbo.json`**:
+```json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "dev": { "cache": false, "persistent": true },
+    "test": { "dependsOn": ["^build"] },
+    "lint": { "dependsOn": ["^build"] }
+  }
+}
+```
+
+### Step 2: Extract Shared Package (Day 2-4)
+
+**`packages/shared/package.json`**:
+```json
+{
+  "name": "@taskboard/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}
+```
+
+Files to move into `packages/shared/src/`:
+
+| Source (current) | Destination | Changes needed |
+|-----------------|-------------|----------------|
+| `src/types/index.ts` | `types/index.ts` | None (pure types) |
+| `src/lib/utils.ts` | `utils/index.ts` | Remove `import { store }` — accept users/projects as params |
+| `src/lib/hooks.ts` | `hooks/index.ts` | None (`useSyncExternalStore` works in RN) |
+| `src/lib/store.ts` | `store/task-store.ts` | Remove `"use client"`, inject supabase as param |
+| `src/lib/messaging-store.ts` | `store/messaging-store.ts` | Same pattern |
+| `src/lib/rate-limit.ts` | `utils/rate-limit.ts` | Server-only, but logic is portable |
+
+**Key refactoring pattern** — make `store.ts` accept a Supabase client:
+
+```typescript
+// packages/shared/src/store/task-store.ts
+import { SupabaseClient } from "@supabase/supabase-js";
+
+export function createTaskStore(supabase: SupabaseClient) {
+  let tasks: Task[] = [];
+  // ... same logic but uses injected supabase instead of import
+  return {
+    getTasks: () => tasks,
+    subscribe: (fn: Listener) => { /* ... */ },
+    addTask: (task: Omit<Task, "id" | "created_at" | "updated_at">) => { /* ... */ },
+    // ...all other methods
+  };
+}
+```
+
+Then both web and mobile create their own instance:
+```typescript
+// apps/web/src/lib/store.ts
+import { createTaskStore } from "@taskboard/shared/store/task-store";
+import { supabase } from "./supabase";
+export const store = createTaskStore(supabase);
+
+// apps/mobile/src/store.ts
+import { createTaskStore } from "@taskboard/shared/store/task-store";
+import { supabase } from "./supabase";
+export const store = createTaskStore(supabase);
+```
+
+### Step 3: Create Expo App (Day 4-5)
+
+```bash
+cd apps/
+npx create-expo-app mobile --template tabs
+cd mobile
+
+# Install core dependencies
+npx expo install expo-router react-native-reanimated react-native-gesture-handler \
+  react-native-screens react-native-safe-area-context @react-navigation/native \
+  @react-navigation/bottom-tabs expo-haptics expo-secure-store expo-auth-session \
+  expo-notifications expo-local-authentication expo-image-picker expo-document-picker
+
+# Install Supabase
+npm install @supabase/supabase-js
+
+# Install fonts
+npx expo install @expo-google-fonts/roboto expo-font
+
+# Install icons
+npm install lucide-react-native react-native-svg
+
+# Link shared package
+# (already handled by workspace — import as @taskboard/shared)
+```
+
+**`apps/mobile/app.json`** (key fields):
+```json
+{
+  "expo": {
+    "name": "TaskBoard",
+    "slug": "taskboard",
+    "version": "1.0.0",
+    "scheme": "taskboard",
+    "platforms": ["ios", "android"],
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#00BCD4"
+    },
+    "ios": {
+      "bundleIdentifier": "com.yourteam.taskboard",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to unlock TaskBoard"
+      }
+    },
+    "android": {
+      "package": "com.yourteam.taskboard",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#00BCD4"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        { "icon": "./assets/notification-icon.png", "color": "#00BCD4" }
+      ]
+    ]
+  }
+}
+```
+
+### Step 4: Native Supabase Auth (Day 5-7)
+
+```typescript
+// apps/mobile/src/supabase.ts
+import { createClient } from "@supabase/supabase-js";
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
+
+const ExpoSecureStoreAdapter = {
+  getItem: (key: string) => SecureStore.getItemAsync(key),
+  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+};
+
+export const supabase = createClient(
+  process.env.EXPO_PUBLIC_SUPABASE_URL!,
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      storage: ExpoSecureStoreAdapter,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  }
+);
+```
+
+### Step 5: Navigation Skeleton (Day 7-9)
+
+```typescript
+// apps/mobile/app/(tabs)/_layout.tsx
+import { Tabs } from "expo-router";
+import { LayoutGrid, List, Sun, MessageSquare, Menu } from "lucide-react-native";
+import { colors } from "../../theme/tokens";
+
+export default function TabLayout() {
+  return (
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: colors.primary[500],
+        tabBarInactiveTintColor: colors.gray[400],
+        tabBarLabelStyle: { fontFamily: "Roboto_500Medium", fontSize: 11 },
+        headerShown: false,
+      }}
+    >
+      <Tabs.Screen
+        name="board"
+        options={{
+          title: "Board",
+          tabBarIcon: ({ color, size }) => <LayoutGrid color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="list"
+        options={{
+          title: "List",
+          tabBarIcon: ({ color, size }) => <List color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="my-day"
+        options={{
+          title: "My Day",
+          tabBarIcon: ({ color, size }) => <Sun color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, size }) => <MessageSquare color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: "More",
+          tabBarIcon: ({ color, size }) => <Menu color={color} size={size} />,
+        }}
+      />
+    </Tabs>
+  );
+}
+```
+
+---
+
+## Native Component Mapping (Web → Mobile)
+
+Each web component has a native counterpart. The component _logic_ (hooks, state) is shared; only the _UI layer_ (JSX/styles) is rewritten.
+
+| Web Component | Native Component | Key Differences |
+|--------------|-----------------|-----------------|
+| `BoardView.tsx` | `KanbanBoard.tsx` | Horizontal ScrollView + Reanimated DnD |
+| `ListView.tsx` | `TaskList.tsx` | FlatList + swipe actions (react-native-swipeable-item) |
+| `MyDayView.tsx` | `MyDayScreen.tsx` | ScrollView + Reanimated sort |
+| `TaskCard.tsx` | `TaskCard.tsx` | Pressable + native shadows |
+| `TaskDetailDrawer.tsx` | `TaskDetailModal.tsx` | Modal stack screen, not drawer |
+| `FilterBar.tsx` | `FilterChips.tsx` | Horizontal FlatList of chip Pressables |
+| `ChatPanel.tsx` | `ChatInput.tsx` | KeyboardAvoidingView + TextInput |
+| `ChannelChat.tsx` | `ChatThread.tsx` | Inverted FlatList for messages |
+| `MessagingView.tsx` | `messages.tsx` (tab) | Stack navigator: list → thread |
+| `ProjectManager.tsx` | `ProjectSettings.tsx` | Screen in More tab stack |
+| `SearchPanel.tsx` | `SearchScreen.tsx` | TextInput + FlatList results |
+| `NotificationBell.tsx` | `NotificationScreen.tsx` | Full screen (not dropdown) |
+| `Toast.tsx` | `Toast.tsx` | react-native-toast-message |
+| `ErrorBoundary.tsx` | `ErrorBoundary.tsx` | Same pattern, RN-compatible |
+| `LoginPage.tsx` | `login.tsx` | expo-auth-session for OAuth |
+
+---
+
+## Testing Strategy for Mobile
+
+### Unit Tests (Shared package — Vitest)
+- All tests in `packages/shared/` run with Vitest (same as current)
+- Store logic, utils, hooks — already covered by existing 43 tests
+- Run with `turbo run test --filter=@taskboard/shared`
+
+### Component Tests (Mobile — Jest + React Native Testing Library)
+```bash
+npm install -D jest @testing-library/react-native jest-expo
+```
+
+Test key interactions:
+- Task card press → navigation to detail
+- Filter chip toggle → list filtering
+- Swipe to complete → status update
+- Chat send → message appears
+
+### E2E Tests (Detox or Maestro)
+Recommend **Maestro** for mobile E2E — simpler YAML-based tests:
+
+```yaml
+# .maestro/login-and-create-task.yaml
+appId: com.yourteam.taskboard
+---
+- launchApp
+- tapOn: "Sign in with Google"
+- waitForAnimationToEnd
+- tapOn: "Board"
+- tapOn: "+"
+- inputText: "New task from E2E test"
+- tapOn: "Create"
+- assertVisible: "New task from E2E test"
+```
+
+### Test Matrix
+| Layer | Tool | What it tests |
+|-------|------|--------------|
+| Shared logic | Vitest | Store, hooks, utils, types |
+| Mobile components | Jest + RNTL | Component rendering, interactions |
+| Mobile E2E | Maestro | Full user flows on device/simulator |
+| Web (existing) | Vitest | Same as current |
+
+---
+
+## CI/CD with EAS
+
+**`eas.json`**:
+```json
+{
+  "cli": { "version": ">= 12.0.0" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": { "simulator": true }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": { "appleId": "your@email.com", "ascAppId": "123456789" },
+      "android": { "serviceAccountKeyPath": "./play-store-key.json" }
+    }
+  }
+}
+```
+
+**GitHub Actions workflow** (`.github/workflows/mobile.yml`):
+```yaml
+name: Mobile Build
+on:
+  push:
+    branches: [main]
+    paths: ['apps/mobile/**', 'packages/shared/**']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run test --workspace=packages/shared
+      - run: npm run test --workspace=apps/mobile
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - run: cd apps/mobile && eas build --platform all --non-interactive
+
+  submit:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: cd apps/mobile && eas submit --platform all --non-interactive
+```
+
+---
+
+## Supabase Edge Functions for Push Notifications
+
+```typescript
+// supabase/functions/push-notification/index.ts
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+serve(async (req) => {
+  const { user_id, title, body, data } = await req.json();
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  // Get user's push token
+  const { data: profile } = await supabase
+    .from("user_preferences")
+    .select("push_token")
+    .eq("user_id", user_id)
+    .single();
+
+  if (!profile?.push_token) return new Response("No token", { status: 200 });
+
+  // Send via Expo Push API
+  const response = await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: profile.push_token,
+      title,
+      body,
+      data,
+      sound: "default",
+      badge: 1,
+    }),
+  });
+
+  return new Response(JSON.stringify(await response.json()), { status: 200 });
+});
+```
+
+**Database trigger** (add to schema):
+```sql
+-- Trigger push notifications on task assignment
+CREATE OR REPLACE FUNCTION notify_task_assigned()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.assignee_id IS DISTINCT FROM OLD.assignee_id AND NEW.assignee_id IS NOT NULL THEN
+    PERFORM net.http_post(
+      url := current_setting('app.supabase_url') || '/functions/v1/push-notification',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || current_setting('app.service_role_key')
+      ),
+      body := jsonb_build_object(
+        'user_id', NEW.assignee_id,
+        'title', 'Task assigned to you',
+        'body', NEW.title,
+        'data', jsonb_build_object('task_id', NEW.id, 'type', 'task_assigned')
+      )
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER on_task_assigned
+  AFTER UPDATE ON tasks
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_task_assigned();
+```
+
+---
+
+## Quick-Start Checklist
+
+When you're ready to begin building:
+
+- [ ] Create Apple Developer account ($99/yr)
+- [ ] Create Google Play Developer account ($25 one-time)
+- [ ] Create EAS account at expo.dev
+- [ ] Set up Turborepo monorepo (Step 1 above)
+- [ ] Extract shared package (Step 2 above)
+- [ ] Verify web app still builds after restructure
+- [ ] Create Expo app (Step 3 above)
+- [ ] Wire up Supabase auth with SecureStore (Step 4)
+- [ ] Build navigation skeleton (Step 5)
+- [ ] Implement first screen (List view — simplest)
+- [ ] Test on physical device with Expo Go
+- [ ] Build remaining screens one at a time
+- [ ] Set up EAS Build for both platforms
+- [ ] Internal testing round (TestFlight + Play Store internal track)
+- [ ] App store submission
