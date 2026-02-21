@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Task, TaskStatus, SECTION_PRESETS, FileAttachment } from "@/types";
 import { store } from "@/lib/store";
 import { useProjects, useUsers } from "@/lib/hooks";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 import {
   getUserById,
   getProjectById,
@@ -93,6 +94,9 @@ export default function TaskDetailDrawer({
     return () => { document.body.style.overflow = ""; };
   }, [task]);
 
+  // M5: Trap focus within drawer when open
+  const trapRef = useFocusTrap<HTMLDivElement>(!!task);
+
   // M8: Close drawer on Escape key
   useEffect(() => {
     if (!task) return;
@@ -169,7 +173,7 @@ export default function TaskDetailDrawer({
   const availablePresets = SECTION_PRESETS.filter((h) => !usedHeadings.has(h));
 
   return (
-    <div className="fixed inset-0 z-[90] flex justify-end">
+    <div className="fixed inset-0 z-[90] flex justify-end" ref={trapRef}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/10 backdrop-blur-[2px]"
@@ -177,7 +181,7 @@ export default function TaskDetailDrawer({
       />
 
       {/* Drawer */}
-      <div className="relative w-full max-w-full sm:max-w-[560px] bg-white shadow-2xl border-l border-gray-100 overflow-y-auto">
+      <div className="relative w-full max-w-full sm:max-w-[560px] bg-white shadow-2xl border-l border-gray-100 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Task details">
         {/* Color accent bar */}
         <div
           className="h-1.5 w-full"

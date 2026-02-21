@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { searchEverything } from "@/lib/search";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 import { SearchResult } from "@/types";
 import {
   Search,
@@ -28,6 +29,9 @@ export default function SearchPanel({ onSelectResult, onClose }: SearchPanelProp
   >("all");
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // M5: Trap focus within search panel
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -88,8 +92,8 @@ export default function SearchPanel({ onSelectResult, onClose }: SearchPanelProp
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 z-[100] flex items-start justify-center pt-[10vh]">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden">
+    <div className="fixed inset-0 bg-black/30 z-[100] flex items-start justify-center pt-[10vh]" ref={trapRef}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden" role="dialog" aria-modal="true" aria-label="Search">
         {/* Search input */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
           <Search size={18} className="text-gray-400 flex-shrink-0" />

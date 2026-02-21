@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useProjects } from "@/lib/hooks";
 import { useTasks } from "@/lib/hooks";
 import { ACCENT_COLORS } from "@/lib/utils";
+import { useFocusTrap } from "@/lib/use-focus-trap";
 import { Plus, Trash2, X, FolderOpen, Edit3, Check, Paperclip } from "lucide-react";
 import ProjectFileBrowser from "./ProjectFileBrowser";
 
@@ -24,6 +25,8 @@ export default function ProjectManager({ onClose, currentUserId }: ProjectManage
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
+  // M5: Trap focus within modal
+  const trapRef = useFocusTrap<HTMLDivElement>();
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(COLOR_OPTIONS[0]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -56,7 +59,7 @@ export default function ProjectManager({ onClose, currentUserId }: ProjectManage
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" ref={trapRef}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/20 backdrop-blur-sm"
@@ -64,7 +67,7 @@ export default function ProjectManager({ onClose, currentUserId }: ProjectManage
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden" role="dialog" aria-modal="true" aria-label="Projects">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
