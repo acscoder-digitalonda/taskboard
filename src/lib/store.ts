@@ -360,6 +360,7 @@ export const store = {
   addNoteToTask: (taskId: string, note: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    const prevNotes = [...task.notes];
     const newNotes = [...task.notes, note];
     tasks = tasks.map((t) =>
       t.id === taskId
@@ -373,13 +374,19 @@ export const store = {
         .from("tasks")
         .update({ notes: newNotes })
         .eq("id", taskId);
-      if (error) console.error("Error adding note:", error);
+      if (error) {
+        console.error("Error adding note:", error);
+        tasks = tasks.map((t) => t.id === taskId ? { ...t, notes: prevNotes } : t);
+        emitTasks();
+        storeErrorEmitter.emit("Failed to save note");
+      }
     })();
   },
 
   removeNoteFromTask: (taskId: string, noteIndex: number) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    const prevNotes = [...task.notes];
     const newNotes = task.notes.filter((_: string, i: number) => i !== noteIndex);
     tasks = tasks.map((t) =>
       t.id === taskId
@@ -393,13 +400,19 @@ export const store = {
         .from("tasks")
         .update({ notes: newNotes })
         .eq("id", taskId);
-      if (error) console.error("Error removing note:", error);
+      if (error) {
+        console.error("Error removing note:", error);
+        tasks = tasks.map((t) => t.id === taskId ? { ...t, notes: prevNotes } : t);
+        emitTasks();
+        storeErrorEmitter.emit("Failed to remove note");
+      }
     })();
   },
 
   addDriveLinkToTask: (taskId: string, link: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    const prevLinks = [...task.drive_links];
     const newLinks = [...task.drive_links, link];
     tasks = tasks.map((t) =>
       t.id === taskId
@@ -413,13 +426,19 @@ export const store = {
         .from("tasks")
         .update({ drive_links: newLinks })
         .eq("id", taskId);
-      if (error) console.error("Error adding drive link:", error);
+      if (error) {
+        console.error("Error adding drive link:", error);
+        tasks = tasks.map((t) => t.id === taskId ? { ...t, drive_links: prevLinks } : t);
+        emitTasks();
+        storeErrorEmitter.emit("Failed to save link");
+      }
     })();
   },
 
   removeDriveLinkFromTask: (taskId: string, linkIndex: number) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    const prevLinks = [...task.drive_links];
     const newLinks = task.drive_links.filter((_: string, i: number) => i !== linkIndex);
     tasks = tasks.map((t) =>
       t.id === taskId
@@ -433,7 +452,12 @@ export const store = {
         .from("tasks")
         .update({ drive_links: newLinks })
         .eq("id", taskId);
-      if (error) console.error("Error removing drive link:", error);
+      if (error) {
+        console.error("Error removing drive link:", error);
+        tasks = tasks.map((t) => t.id === taskId ? { ...t, drive_links: prevLinks } : t);
+        emitTasks();
+        storeErrorEmitter.emit("Failed to remove link");
+      }
     })();
   },
 
@@ -441,6 +465,7 @@ export const store = {
   addSectionToTask: (taskId: string, heading: string, content: string) => {
     const tempId = crypto.randomUUID();
     const section: TaskSection = { id: tempId, heading, content };
+    const prevSections = tasks.find((t) => t.id === taskId)?.sections || [];
     tasks = tasks.map((t) =>
       t.id === taskId
         ? { ...t, sections: [...t.sections, section], updated_at: new Date().toISOString() }
@@ -458,6 +483,9 @@ export const store = {
         .single();
       if (error) {
         console.error("Error adding section:", error);
+        tasks = tasks.map((t) => t.id === taskId ? { ...t, sections: prevSections } : t);
+        emitTasks();
+        storeErrorEmitter.emit("Failed to add section");
         return;
       }
       // Replace temp ID
@@ -471,6 +499,8 @@ export const store = {
   },
 
   updateSectionInTask: (taskId: string, sectionId: string, updates: Partial<TaskSection>) => {
+    const prevTask = tasks.find((t) => t.id === taskId);
+    const prevSection = prevTask?.sections.find((s) => s.id === sectionId);
     tasks = tasks.map((t) =>
       t.id === taskId
         ? {
@@ -491,12 +521,24 @@ export const store = {
           .from("task_sections")
           .update(dbUpdates)
           .eq("id", sectionId);
-        if (error) console.error("Error updating section:", error);
+        if (error) {
+          console.error("Error updating section:", error);
+          if (prevSection) {
+            tasks = tasks.map((t) =>
+              t.id === taskId
+                ? { ...t, sections: t.sections.map((s) => s.id === sectionId ? prevSection : s) }
+                : t
+            );
+            emitTasks();
+          }
+          storeErrorEmitter.emit("Failed to update section");
+        }
       }
     })();
   },
 
   removeSectionFromTask: (taskId: string, sectionId: string) => {
+    const prevSections = tasks.find((t) => t.id === taskId)?.sections || [];
     tasks = tasks.map((t) =>
       t.id === taskId
         ? { ...t, sections: t.sections.filter((s) => s.id !== sectionId), updated_at: new Date().toISOString() }
@@ -509,7 +551,12 @@ export const store = {
         .from("task_sections")
         .delete()
         .eq("id", sectionId);
-      if (error) console.error("Error removing section:", error);
+      if (error) {
+        console.error("Error removing section:", error);
+        tasks = tasks.map((t) => t.id === taskId ? { ...t, sections: prevSections } : t);
+        emitTasks();
+        storeErrorEmitter.emit("Failed to remove section");
+      }
     })();
   },
 
