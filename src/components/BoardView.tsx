@@ -72,7 +72,7 @@ function DroppableColumn({
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
-    <div className="w-full md:flex-1 md:min-w-[280px] md:max-w-[360px]">
+    <div className="w-full sm:flex-1 sm:min-w-[240px] sm:max-w-[360px]">
       <div className="flex items-center gap-2 mb-4">
         <div
           className="w-3 h-3 rounded-full"
@@ -166,7 +166,7 @@ export default function BoardView({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex flex-col md:flex-row gap-4 md:overflow-x-auto pb-4 px-1">
+      <div className="flex flex-col sm:flex-row gap-4 sm:overflow-x-auto pb-4 px-1">
         {COLUMNS.map((status) => (
           <DroppableColumn
             key={status}

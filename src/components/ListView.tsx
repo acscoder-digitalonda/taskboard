@@ -81,7 +81,7 @@ export default function ListView({ filteredTasks, onClickCard }: ListViewProps) 
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
       {/* Desktop table */}
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full min-w-[780px]">
           <thead>
             <tr className="border-b border-gray-100">
               <SortHeader label="Title" field="title" className="min-w-[250px]" />
@@ -89,8 +89,9 @@ export default function ListView({ filteredTasks, onClickCard }: ListViewProps) 
               <SortHeader label="Project" field="project" />
               <SortHeader label="Status" field="status" />
               <SortHeader label="Due" field="due" />
-              <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 w-20">
-                Actions
+              <th className="px-2 py-3 text-center text-xs font-bold uppercase tracking-wider text-gray-500 w-16">
+                <span className="hidden sm:inline">Actions</span>
+                <span className="sm:hidden">✓</span>
               </th>
             </tr>
           </thead>

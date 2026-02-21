@@ -244,7 +244,7 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
                 className="w-3 h-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: s.project.color }}
               />
-              <span className="truncate max-w-[120px]">{s.project.name}</span>
+              <span className="truncate max-w-[160px]">{s.project.name}</span>
               {s.doingCount > 0 && (
                 <span className="text-xs bg-cyan-50 text-cyan-600 px-1.5 py-0.5 rounded-full font-bold">
                   {s.doingCount}
@@ -362,7 +362,7 @@ function AllProjectsOverview({
       )}
 
       {/* Overview cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {summaries.map((s) => (
           <button
             key={s.project.id}
