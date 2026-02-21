@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import {
+  createServerSupabase,
+  getAuthenticatedUserId,
+  verifyWebhookSecret,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 /**
  * POST /api/openclaw/summarize
@@ -22,6 +23,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!verifyWebhookSecret(req)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const supabase = createServerSupabase();
     const payload = await req.json();
     const {
       source_type,
@@ -87,6 +93,11 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId(req);
+    const isWebhook = verifyWebhookSecret(req);
+    if (!userId && !isWebhook) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const { searchParams } = new URL(req.url);
     const sourceType = searchParams.get("source_type");
     const sourceId = searchParams.get("source_id");

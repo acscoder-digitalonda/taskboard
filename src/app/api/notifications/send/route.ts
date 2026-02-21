@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import {
+  createServerSupabase,
+  getAuthenticatedUserId,
+  verifyWebhookSecret,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 /**
  * POST /api/notifications/send
@@ -22,6 +23,12 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 export async function POST(req: NextRequest) {
   try {
+    // Accept either user session auth OR webhook secret (for internal service calls)
+    const userId = await getAuthenticatedUserId(req);
+    const isWebhook = verifyWebhookSecret(req);
+    if (!userId && !isWebhook) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const payload = await req.json();
     const {
       user_id,

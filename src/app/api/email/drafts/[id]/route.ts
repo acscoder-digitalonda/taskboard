@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import {
+  createServerSupabase,
+  getAuthenticatedUserId,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 /**
  * PATCH /api/email/drafts/[id] — Edit a draft
+ *
+ * Requires: Authorization: Bearer <access_token>
  *
  * Body: {
  *   body_text?: string,
@@ -23,6 +25,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const { id } = await params;
     const body = await req.json();
 
@@ -61,6 +67,17 @@ export async function PATCH(
         { error: "body_text, subject, and to_email cannot be empty" },
         { status: 400 }
       );
+    }
+
+    // H7: Validate email format if to_email is being updated
+    if (updates.to_email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(String(updates.to_email))) {
+        return NextResponse.json(
+          { error: "Invalid email format for to_email" },
+          { status: 400 }
+        );
+      }
     }
 
     // Don't allow editing sent drafts
@@ -110,12 +127,18 @@ export async function PATCH(
 
 /**
  * DELETE /api/email/drafts/[id] — Discard a draft
+ *
+ * Requires: Authorization: Bearer <access_token>
  */
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const { id } = await params;
 
     // Don't allow deleting sent drafts

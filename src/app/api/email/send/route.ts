@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { sendEmail, isGmailConfigured, getSendAsEmail } from "@/lib/gmail";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import {
+  createServerSupabase,
+  getAuthenticatedUserId,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 /**
  * POST /api/email/send — Send a draft via Gmail API
@@ -23,6 +23,10 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const body = await req.json();
     const { draft_id, sent_by } = body;
 

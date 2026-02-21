@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { createServerSupabase, verifyWebhookSecret } from "@/lib/api-auth";
 
 /**
  * POST /api/email/inbound
@@ -29,6 +25,15 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 export async function POST(req: NextRequest) {
   try {
+    // C2: Verify webhook secret for inbound email
+    if (!verifyWebhookSecret(req)) {
+      return NextResponse.json(
+        { error: "Invalid webhook secret" },
+        { status: 403 }
+      );
+    }
+
+    const supabase = createServerSupabase();
     let from: string;
     let to: string;
     let subject: string;

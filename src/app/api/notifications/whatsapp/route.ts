@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyWebhookSecret } from "@/lib/api-auth";
 
 /**
  * POST /api/notifications/whatsapp
@@ -11,6 +12,14 @@ import { NextRequest, NextResponse } from "next/server";
  */
 export async function POST(req: NextRequest) {
   try {
+    // Require webhook secret for internal service calls
+    if (!verifyWebhookSecret(req)) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 403 }
+      );
+    }
+
     const { to, message } = await req.json();
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -84,5 +93,8 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   // Twilio sends a GET to verify the webhook URL
+  if (!verifyWebhookSecret(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
   return NextResponse.json({ status: "ok" });
 }

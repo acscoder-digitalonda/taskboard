@@ -33,8 +33,8 @@ export default function Home() {
   );
 }
 
-// DEV_BYPASS: Temporarily skip auth for preview. Remove when Google Auth is configured.
-const DEV_BYPASS_AUTH = true;
+// DEV_BYPASS: Set NEXT_PUBLIC_DEV_BYPASS_AUTH=true in .env.local for dev preview.
+const DEV_BYPASS_AUTH = process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "true";
 
 function LoadingScreen() {
   return (

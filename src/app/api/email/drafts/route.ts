@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import {
+  createServerSupabase,
+  getAuthenticatedUserId,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 /**
  * POST /api/email/drafts — Create a new email draft
+ *
+ * Requires: Authorization: Bearer <access_token>
  *
  * Body: {
  *   channel_id?: string,
@@ -24,6 +26,10 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const body = await req.json();
     const {
       channel_id,
@@ -93,6 +99,10 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const { searchParams } = new URL(req.url);
     const channelId = searchParams.get("channel_id");
     const projectId = searchParams.get("project_id");

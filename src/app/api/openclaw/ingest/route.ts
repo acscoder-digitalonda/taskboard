@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { createServerSupabase, verifyWebhookSecret } from "@/lib/api-auth";
 
 /**
  * POST /api/openclaw/ingest
@@ -29,6 +25,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!verifyWebhookSecret(req)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const supabase = createServerSupabase();
     const payload = await req.json();
     const {
       source_email,
@@ -49,17 +50,23 @@ export async function POST(req: NextRequest) {
     const createdTasks: string[] = [];
     const notifiedUsers = new Set<string>();
 
+    // L12: Hoist user query outside the loop (was querying per task)
+    const { data: firstUser } = await supabase
+      .from("users")
+      .select("id")
+      .limit(1)
+      .single();
+
+    const createdById = firstUser?.id;
+    if (!createdById) {
+      return NextResponse.json(
+        { error: "No users found in the system" },
+        { status: 500 }
+      );
+    }
+
     // Create each task
     for (const taskInput of taskInputs) {
-      // Get a system user ID for created_by (first user, or use a service account)
-      const { data: firstUser } = await supabase
-        .from("users")
-        .select("id")
-        .limit(1)
-        .single();
-
-      const createdById = firstUser?.id;
-      if (!createdById) continue;
 
       const { data: task, error: taskErr } = await supabase
         .from("tasks")

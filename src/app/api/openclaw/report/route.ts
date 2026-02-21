@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import {
+  createServerSupabase,
+  getAuthenticatedUserId,
+  verifyWebhookSecret,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 /**
  * POST /api/openclaw/report
@@ -20,6 +21,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  */
 export async function POST(req: NextRequest) {
   try {
+    if (!verifyWebhookSecret(req)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const supabase = createServerSupabase();
     const { action, description, task_id, project_id, channel_id, metadata } =
       await req.json();
 
@@ -68,6 +74,12 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
+    // Allow user auth OR webhook secret for reading reports
+    const userId = await getAuthenticatedUserId(req);
+    const isWebhook = verifyWebhookSecret(req);
+    if (!userId && !isWebhook) return unauthorizedResponse();
+
+    const supabase = createServerSupabase();
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get("limit") || "20");
     const projectId = searchParams.get("project_id");
