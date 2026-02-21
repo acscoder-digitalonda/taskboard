@@ -1,5 +1,9 @@
 # TaskBoard — Design System Rules
 
+## Rules
+
+1. **Commit after every major change** with a clear, descriptive commit message. Never let more than ~15 minutes of work go uncommitted. This protects against crashes, power loss, and makes it easy to roll back any change with `git revert`.
+
 ## Tech Stack
 
 - **Framework**: Next.js 16 (App Router) + React 19
@@ -7,7 +11,8 @@
 - **Styling**: Tailwind CSS 4 (utility-first, PostCSS)
 - **Drag & Drop**: @dnd-kit/core + @dnd-kit/sortable
 - **Icons**: lucide-react 0.563
-- **Backend**: @supabase/supabase-js (installed, not yet wired)
+- **Backend**: Supabase (PostgreSQL + Realtime + Auth + Storage)
+- **Email**: googleapis (Gmail API via Service Account domain-wide delegation)
 - **Font**: Roboto (300, 400, 500, 700, 900) from Google Fonts
 
 ## Token Definitions
@@ -94,16 +99,23 @@ All components are **client components** (`"use client"`) in `src/components/`.
 
 ### Core Components
 
-| Component            | File                        | Purpose                              |
-|----------------------|-----------------------------|--------------------------------------|
-| `TaskCard`           | `TaskCard.tsx`              | Core task display unit               |
-| `BoardView`          | `BoardView.tsx`             | Kanban board (4 columns, dnd-kit)    |
-| `ListView`           | `ListView.tsx`              | Sortable table/card list             |
-| `MyDayView`          | `MyDayView.tsx`             | Personal dashboard (today/upcoming)  |
-| `TaskDetailDrawer`   | `TaskDetailDrawer.tsx`      | Full task editor (right drawer)      |
-| `FilterBar`          | `FilterBar.tsx`             | Filter controls (user/project/status)|
-| `ChatPanel`          | `ChatPanel.tsx`             | Conversational task creation         |
-| `ProjectManager`     | `ProjectManager.tsx`        | Project CRUD modal                   |
+| Component               | File                          | Purpose                              |
+|-------------------------|-------------------------------|--------------------------------------|
+| `TaskCard`              | `TaskCard.tsx`                | Core task display unit               |
+| `BoardView`             | `BoardView.tsx`               | Kanban board (4 columns, dnd-kit)    |
+| `ListView`              | `ListView.tsx`                | Sortable table/card list             |
+| `MyDayView`             | `MyDayView.tsx`               | Personal dashboard (today/upcoming)  |
+| `TaskDetailDrawer`      | `TaskDetailDrawer.tsx`        | Full task editor (right drawer)      |
+| `FilterBar`             | `FilterBar.tsx`               | Filter controls (user/project/status)|
+| `ChatPanel`             | `ChatPanel.tsx`               | Conversational task creation         |
+| `ProjectManager`        | `ProjectManager.tsx`          | Project CRUD modal                   |
+| `MessagingView`         | `MessagingView.tsx`           | Messages + Hub container (split pane)|
+| `ChannelChat`           | `ChannelChat.tsx`             | Chat thread with email badges        |
+| `CommsHub`              | `CommsHub.tsx`                | Project hub, drafts, email threads   |
+| `EmailDraftComposer`    | `EmailDraftComposer.tsx`      | Draft editor (To/Subj/Body + Send)   |
+| `NotificationBell`      | `NotificationBell.tsx`        | Notification dropdown with badges    |
+| `SearchModal`           | `SearchModal.tsx`             | Global search across tasks/messages  |
+| `LoginPage`             | `LoginPage.tsx`               | User selection / auth gate           |
 
 ### Styling Patterns
 
@@ -174,26 +186,53 @@ Simple **observer pattern** using `useSyncExternalStore`:
 ```
 src/
 ├── app/
-│   ├── layout.tsx          # Root layout, metadata, fonts
-│   ├── page.tsx            # Main app shell (header, views, modals)
-│   └── globals.css         # Global styles, @theme tokens
-├── components/             # All React components (use client)
+│   ├── layout.tsx              # Root layout, metadata, fonts
+│   ├── page.tsx                # Main app shell (header, views, modals)
+│   ├── globals.css             # Global styles, @theme tokens
+│   └── api/
+│       └── email/
+│           ├── drafts/
+│           │   ├── route.ts        # POST create, GET list drafts
+│           │   └── [id]/route.ts   # PATCH edit, DELETE discard draft
+│           ├── send/route.ts       # POST send draft via Gmail API
+│           └── inbound/route.ts    # POST webhook for incoming emails
+├── components/                 # All React components (use client)
 │   ├── BoardView.tsx
+│   ├── ChannelChat.tsx         # Chat thread with email badges
 │   ├── ChatPanel.tsx
+│   ├── CommsHub.tsx            # Project hub + drafts + email threads
+│   ├── EmailDraftComposer.tsx  # Draft review/edit/send modal
 │   ├── FilterBar.tsx
 │   ├── ListView.tsx
+│   ├── LoginPage.tsx           # User selection auth gate
+│   ├── MessagingView.tsx       # Messages + Hub split pane
 │   ├── MyDayView.tsx
+│   ├── NotificationBell.tsx    # Notifications dropdown
 │   ├── ProjectManager.tsx
+│   ├── SearchModal.tsx         # Global search modal
 │   ├── TaskCard.tsx
 │   └── TaskDetailDrawer.tsx
 ├── lib/
-│   ├── store.ts            # State management (to be swapped to Supabase)
-│   ├── hooks.ts            # Custom React hooks
+│   ├── store.ts            # State management (observer pattern)
+│   ├── hooks.ts            # Custom React hooks (useTasks, useMyDayTasks, etc.)
 │   ├── utils.ts            # Utilities (formatDue, STATUS_COLORS)
+│   ├── gmail.ts            # Gmail API client (service account auth, send)
 │   └── data.ts             # Seed data (USERS, PROJECTS, TASKS)
+├── supabase/
+│   ├── schema-v4-gmail.sql # email_drafts table, projects.client_emails
+│   └── ...                 # Other schema files
 └── types/
-    └── index.ts            # TypeScript interfaces
+    └── index.ts            # TypeScript interfaces (Task, EmailDraft, etc.)
 ```
+
+## Gmail Integration
+
+- **Service Account**: `taskboard-gmail-sender@taskboard-487015.iam.gserviceaccount.com`
+- **Domain-wide Delegation**: Authorized for `gmail.send` scope
+- **Send-as**: `team@digitalonda.com` (impersonated via service account)
+- **Flow**: Inbound email → webhook → auto-draft → Katie reviews → clicks Send → Gmail API
+- **Tables**: `email_drafts` (status: draft/approved/sent/failed)
+- **Env vars**: `GOOGLE_SERVICE_ACCOUNT_JSON`, `GMAIL_SEND_AS`
 
 ## When Implementing Figma Designs
 
