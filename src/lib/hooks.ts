@@ -6,8 +6,11 @@ import { Task, TaskStatus, ViewMode } from "@/types";
 
 export function useTasks() {
   const tasks = useSyncExternalStore(store.subscribe, store.getTasks, store.getTasks);
+  // H4: Expose loading state so views can distinguish "loading" from "empty"
+  const initialized = useSyncExternalStore(store.subscribe, store.getInitialized, store.getInitialized);
   return {
     tasks,
+    loading: !initialized,
     addTask: store.addTask,
     updateTask: store.updateTask,
     moveTask: store.moveTask,

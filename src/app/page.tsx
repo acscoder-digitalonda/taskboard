@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTasks, useFilters } from "@/lib/hooks";
 import { Task, ViewMode } from "@/types";
@@ -81,7 +81,7 @@ function AppShell() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showProjectManager, setShowProjectManager] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const { tasks } = useTasks();
+  const { tasks, loading: tasksLoading } = useTasks();
   const {
     assigneeFilter,
     setAssigneeFilter,
@@ -103,20 +103,23 @@ function AppShell() {
     ? tasks.find((t) => t.id === selectedTask.id) || null
     : null;
 
-  // Global keyboard shortcut for search
+  // H9: Use ref to avoid re-registering listener on every showSearch change
+  const showSearchRef = useRef(showSearch);
+  useEffect(() => { showSearchRef.current = showSearch; }, [showSearch]);
+
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setShowSearch((prev) => !prev);
       }
-      if (e.key === "Escape" && showSearch) {
+      if (e.key === "Escape" && showSearchRef.current) {
         setShowSearch(false);
       }
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [showSearch]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-white">
@@ -249,12 +252,14 @@ function AppShell() {
                   <BoardView
                     filteredTasks={filteredTasks}
                     onClickCard={handleClickCard}
+                    loading={tasksLoading}
                   />
                 )}
                 {viewMode === "list" && (
                   <ListView
                     filteredTasks={filteredTasks}
                     onClickCard={handleClickCard}
+                    loading={tasksLoading}
                   />
                 )}
                 {viewMode === "myday" && (

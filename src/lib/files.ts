@@ -180,17 +180,22 @@ export async function getFileUrl(
 
 // ── List files ─────────────────────────────────────────────────
 
+// H8: Default page size for file listings
+const FILE_PAGE_SIZE = 100;
+
 /**
  * List files attached to a task.
  */
 export async function getTaskFiles(
-  taskId: string
+  taskId: string,
+  { limit = FILE_PAGE_SIZE, offset = 0 } = {}
 ): Promise<FileAttachment[]> {
   const { data, error } = await supabase
     .from("files")
     .select("*")
     .eq("task_id", taskId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (error) {
     console.error("Error fetching task files:", error);
@@ -204,13 +209,15 @@ export async function getTaskFiles(
  * List files in a channel.
  */
 export async function getChannelFiles(
-  channelId: string
+  channelId: string,
+  { limit = FILE_PAGE_SIZE, offset = 0 } = {}
 ): Promise<FileAttachment[]> {
   const { data, error } = await supabase
     .from("files")
     .select("*")
     .eq("channel_id", channelId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (error) {
     console.error("Error fetching channel files:", error);
@@ -224,13 +231,15 @@ export async function getChannelFiles(
  * List ALL files in a project (across tasks, channels, and general).
  */
 export async function getProjectFiles(
-  projectId: string
+  projectId: string,
+  { limit = FILE_PAGE_SIZE, offset = 0 } = {}
 ): Promise<FileAttachment[]> {
   const { data, error } = await supabase
     .from("files")
     .select("*")
     .eq("project_id", projectId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (error) {
     console.error("Error fetching project files:", error);

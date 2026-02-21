@@ -118,11 +118,13 @@ function DroppableColumn({
 interface BoardViewProps {
   filteredTasks: Task[];
   onClickCard?: (task: Task) => void;
+  loading?: boolean;
 }
 
 export default function BoardView({
   filteredTasks,
   onClickCard,
+  loading,
 }: BoardViewProps) {
   const { moveTask } = useTasks();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -157,6 +159,27 @@ export default function BoardView({
     if (overTask) {
       moveTask(taskId, overTask.status);
     }
+  }
+
+  // H4: Show loading skeleton while tasks are being fetched
+  if (loading) {
+    return (
+      <div className="flex flex-col sm:flex-row gap-4 sm:overflow-x-auto pb-4 px-1">
+        {COLUMNS.map((status) => (
+          <div key={status} className="w-full sm:flex-1 sm:min-w-[240px] sm:max-w-[360px]">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-3 h-3 rounded-full bg-gray-200 animate-pulse" />
+              <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="space-y-2 min-h-[200px] p-2 rounded-xl bg-gray-50/50">
+              {[1, 2].map((i) => (
+                <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (

@@ -3,6 +3,11 @@
 import { SearchResult } from "@/types";
 import { supabase } from "./supabase";
 
+// H6: Escape LIKE wildcard characters in user input
+function escapeLikePattern(input: string): string {
+  return input.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
+
 /**
  * Unified search across tasks, messages, files, and channels.
  * Uses Postgres full-text search (tsvector) for performance.
@@ -121,7 +126,7 @@ export async function searchEverything(
         const { data } = await supabase
           .from("channels")
           .select("id, name, description, type, project_id, created_at")
-          .ilike("name", `%${query}%`)
+          .ilike("name", `%${escapeLikePattern(query)}%`)
           .eq("is_archived", false)
           .limit(limit);
 

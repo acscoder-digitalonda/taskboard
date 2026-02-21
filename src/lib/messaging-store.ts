@@ -62,28 +62,30 @@ async function fetchChannels(userId: string): Promise<Channel[]> {
     return [];
   }
 
-  // Get last message for each channel
-  const channelsWithMeta: Channel[] = [];
-  for (const ch of channelRows || []) {
-    const { data: lastMsg } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("channel_id", ch.id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
+  // H1: Batch-fetch last messages and unread counts in parallel (was N+1)
+  const rows = channelRows || [];
+  if (!rows.length) return [];
 
-    // Count unread messages
+  const metaPromises = rows.map(async (ch) => {
     const lastRead = lastReadMap.get(ch.id) || ch.created_at;
-    const { count: unreadCount } = await supabase
-      .from("messages")
-      .select("*", { count: "exact", head: true })
-      .eq("channel_id", ch.id)
-      .is("deleted_at", null)
-      .gt("created_at", lastRead);
+    const [lastMsgResult, unreadResult] = await Promise.all([
+      supabase
+        .from("messages")
+        .select("*")
+        .eq("channel_id", ch.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single(),
+      supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("channel_id", ch.id)
+        .is("deleted_at", null)
+        .gt("created_at", lastRead),
+    ]);
 
-    channelsWithMeta.push({
+    return {
       id: ch.id,
       name: ch.name,
       description: ch.description,
@@ -93,12 +95,12 @@ async function fetchChannels(userId: string): Promise<Channel[]> {
       is_archived: ch.is_archived,
       created_at: ch.created_at,
       updated_at: ch.updated_at,
-      last_message: lastMsg || null,
-      unread_count: unreadCount || 0,
-    });
-  }
+      last_message: lastMsgResult.data || null,
+      unread_count: unreadResult.count || 0,
+    };
+  });
 
-  return channelsWithMeta;
+  return Promise.all(metaPromises);
 }
 
 // ---- Fetch Messages (paginated) ----
@@ -155,12 +157,19 @@ async function fetchFilesForMessages(messageIds: string[]): Promise<Map<string, 
     return new Map();
   }
 
+  const rows = data || [];
+  if (!rows.length) return new Map();
+
+  // H2: Use createSignedUrls (batch) instead of getPublicUrl
+  const paths = rows.map((f) => f.storage_path as string);
+  const { data: signedBatch } = await supabase.storage
+    .from("files")
+    .createSignedUrls(paths, 3600);
+
   const map = new Map<string, FileAttachment[]>();
-  for (const f of data || []) {
+  for (let i = 0; i < rows.length; i++) {
+    const f = rows[i];
     const arr = map.get(f.message_id) || [];
-    const { data: urlData } = supabase.storage
-      .from("files")
-      .getPublicUrl(f.storage_path);
     arr.push({
       id: f.id,
       name: f.name,
@@ -173,7 +182,7 @@ async function fetchFilesForMessages(messageIds: string[]): Promise<Map<string, 
       task_id: f.task_id,
       project_id: f.project_id,
       created_at: f.created_at,
-      url: urlData?.publicUrl,
+      url: signedBatch?.[i]?.signedUrl || undefined,
     });
     map.set(f.message_id, arr);
   }
@@ -253,6 +262,18 @@ function setupMessageRealtime(channelId: string, userId: string) {
 // Also listen for new channels / channel updates globally
 let channelRealtimeSub: ReturnType<typeof supabase.channel> | null = null;
 
+// H3: Debounce channel refetch to avoid hammering on rapid message activity
+let channelRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+const CHANNEL_REFETCH_DELAY = 2000; // 2 seconds
+
+function debouncedChannelRefetch(userId: string) {
+  if (channelRefetchTimer) clearTimeout(channelRefetchTimer);
+  channelRefetchTimer = setTimeout(async () => {
+    channels = await fetchChannels(userId);
+    emitChannels();
+  }, CHANNEL_REFETCH_DELAY);
+}
+
 function setupChannelRealtime(userId: string) {
   if (channelRealtimeSub) {
     supabase.removeChannel(channelRealtimeSub);
@@ -263,18 +284,16 @@ function setupChannelRealtime(userId: string) {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "channels" },
-      async () => {
-        channels = await fetchChannels(userId);
-        emitChannels();
+      () => {
+        debouncedChannelRefetch(userId);
       }
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "messages" },
-      async () => {
+      () => {
         // Refresh channel list to update last_message and unread counts
-        channels = await fetchChannels(userId);
-        emitChannels();
+        debouncedChannelRefetch(userId);
       }
     )
     .subscribe();

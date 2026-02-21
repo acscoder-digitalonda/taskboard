@@ -9,11 +9,12 @@ import { useState } from "react";
 interface ListViewProps {
   filteredTasks: Task[];
   onClickCard?: (task: Task) => void;
+  loading?: boolean;
 }
 
 type SortKey = "title" | "assignee" | "project" | "status" | "due" | "priority";
 
-export default function ListView({ filteredTasks, onClickCard }: ListViewProps) {
+export default function ListView({ filteredTasks, onClickCard, loading }: ListViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>("priority");
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -303,7 +304,21 @@ export default function ListView({ filteredTasks, onClickCard }: ListViewProps) 
         })}
       </div>
 
-      {sorted.length === 0 && (
+      {/* H4: Distinguish loading from empty */}
+      {loading && sorted.length === 0 && (
+        <div className="divide-y divide-gray-50">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="p-4 flex items-center gap-3">
+              <div className="w-1.5 h-8 rounded-full bg-gray-200 animate-pulse" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+                <div className="h-3 bg-gray-100 rounded animate-pulse w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!loading && sorted.length === 0 && (
         <div className="text-center py-12 text-gray-400">
           No tasks match your filters
         </div>

@@ -192,6 +192,8 @@ async function initStore() {
 export const store = {
   // --- Tasks ---
   getTasks: () => tasks,
+  // H4: Expose initialized state for loading indicators
+  getInitialized: () => initialized,
 
   subscribe: (fn: Listener) => {
     taskListeners.add(fn);
