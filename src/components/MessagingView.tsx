@@ -81,8 +81,12 @@ export default function MessagingView({ onOpenTask }: MessagingViewProps) {
         )}
       </div>
 
-      {/* Main content */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Main content — hidden on mobile when showing sidebar list */}
+      <div
+        className={`flex-1 min-w-0 flex flex-col ${
+          view.kind === "list" ? "hidden sm:flex" : "flex"
+        }`}
+      >
         {view.kind === "list" && (
           <div className="flex-1 flex items-center justify-center text-gray-400">
             <div className="text-center">

@@ -492,7 +492,11 @@ function MessageBubble({
         {!isSameAuthor && (
           <div className="flex items-baseline gap-2 mb-0.5">
             <span className="text-sm font-bold text-gray-900">
-              {message.is_ai ? "🤖 AI Assistant" : sender?.name || "Unknown"}
+              {message.is_ai
+                ? "🤖 AI Assistant"
+                : isEmailReceived
+                  ? (meta.from_name as string) || (meta.source_email as string) || "Unknown Sender"
+                  : sender?.name || "Unknown"}
             </span>
             {isEmailReceived && (
               <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">

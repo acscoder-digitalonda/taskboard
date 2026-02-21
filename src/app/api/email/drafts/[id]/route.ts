@@ -51,6 +51,18 @@ export async function PATCH(
       );
     }
 
+    // Validate required fields aren't set to empty
+    if (
+      (updates.body_text !== undefined && !String(updates.body_text).trim()) ||
+      (updates.subject !== undefined && !String(updates.subject).trim()) ||
+      (updates.to_email !== undefined && !String(updates.to_email).trim())
+    ) {
+      return NextResponse.json(
+        { error: "body_text, subject, and to_email cannot be empty" },
+        { status: 400 }
+      );
+    }
+
     // Don't allow editing sent drafts
     const { data: existing } = await supabase
       .from("email_drafts")
