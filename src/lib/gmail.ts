@@ -2,7 +2,7 @@
  * Gmail API helpers — server-side only.
  *
  * Uses a Google Service Account with domain-wide delegation
- * to send emails as team@digitalonda.com.
+ * to send emails as the address configured in GMAIL_SEND_AS.
  *
  * Setup:
  *  1. GCP: Enable Gmail API, create Service Account, download JSON key
@@ -12,7 +12,8 @@
 
 import { google } from "googleapis";
 
-const SEND_AS = process.env.GMAIL_SEND_AS || "team@digitalonda.com";
+// L3: No hardcoded fallback — GMAIL_SEND_AS must be set in env
+const SEND_AS = process.env.GMAIL_SEND_AS || "";
 
 /**
  * Get an authenticated Gmail client.
@@ -155,7 +156,7 @@ export async function sendEmail(options: {
  * Check if Gmail sending is configured.
  */
 export function isGmailConfigured(): boolean {
-  return !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  return !!process.env.GOOGLE_SERVICE_ACCOUNT_JSON && !!SEND_AS;
 }
 
 /**

@@ -88,12 +88,13 @@ async function fetchOrUpsertPublicUser(session: Session): Promise<User | null> {
 const DEV_BYPASS_AUTH = process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "true";
 const DEV_BYPASS_USER_ID = process.env.NEXT_PUBLIC_DEV_BYPASS_USER_ID || "9ccc8eb5-7690-49c3-8f42-c09f083e6c37";
 
+// L3: Dev fallback user — no hardcoded org-specific values
 const DEV_FALLBACK_USER: User = {
   id: DEV_BYPASS_USER_ID,
-  name: "Jordan Howard",
+  name: "Dev User",
   color: "#00BCD4",
-  initials: "JH",
-  email: "jordan@digitalonda.com",
+  initials: "DU",
+  email: process.env.NEXT_PUBLIC_DEV_BYPASS_EMAIL || "dev@localhost",
 };
 
 async function fetchDevBypassUser(): Promise<User> {

@@ -227,12 +227,13 @@ src/
 
 ## Gmail Integration
 
-- **Service Account**: `taskboard-gmail-sender@taskboard-487015.iam.gserviceaccount.com`
+- **Service Account**: Configured via `GOOGLE_SERVICE_ACCOUNT_JSON` env var
 - **Domain-wide Delegation**: Authorized for `gmail.send` scope
-- **Send-as**: `team@digitalonda.com` (impersonated via service account)
-- **Flow**: Inbound email → webhook → auto-draft → Katie reviews → clicks Send → Gmail API
+- **Send-as**: Configured via `GMAIL_SEND_AS` env var (impersonated via service account)
+- **Team Name**: Configured via `NEXT_PUBLIC_TEAM_NAME` env var (used in auto-reply signatures)
+- **Flow**: Inbound email → webhook → auto-draft → reviewer approves → clicks Send → Gmail API
 - **Tables**: `email_drafts` (status: draft/approved/sent/failed)
-- **Env vars**: `GOOGLE_SERVICE_ACCOUNT_JSON`, `GMAIL_SEND_AS`
+- **Env vars**: `GOOGLE_SERVICE_ACCOUNT_JSON`, `GMAIL_SEND_AS`, `NEXT_PUBLIC_TEAM_NAME`
 
 ## When Implementing Figma Designs
 

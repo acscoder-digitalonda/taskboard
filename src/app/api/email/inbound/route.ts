@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase, verifyWebhookSecret } from "@/lib/api-auth";
 
+// L3: Team name from env for auto-reply signatures
+const TEAM_NAME = process.env.NEXT_PUBLIC_TEAM_NAME || "Our Team";
+
 /**
  * POST /api/email/inbound
  *
- * Webhook for inbound emails to team@digitalonda.com.
+ * Webhook for inbound emails (recipient configured via GMAIL_SEND_AS).
  * Compatible with SendGrid Inbound Parse, Mailgun, or Postmark.
  *
  * Stores the email as a message in the appropriate project channel,
@@ -12,7 +15,7 @@ import { createServerSupabase, verifyWebhookSecret } from "@/lib/api-auth";
  *
  * Body (JSON):
  *   from: string          — sender email
- *   to: string            — recipient (team@digitalonda.com)
+ *   to: string            — recipient (configured via GMAIL_SEND_AS)
  *   subject: string       — email subject
  *   text: string          — plain text body
  *   html?: string         — HTML body (optional)
@@ -241,7 +244,7 @@ export async function POST(req: NextRequest) {
       "Thank you for your email. I'll review this and get back to you shortly.",
       "",
       "Best regards,",
-      "Team Digital Onda",
+      TEAM_NAME,
     ].join("\n");
 
     const { data: draftData } = await supabase

@@ -20,7 +20,7 @@ const limiter = rateLimit({ windowMs: 60_000, max: 10 });
  *
  * Flow:
  * 1. Load draft from DB (must be 'draft' or 'approved')
- * 2. Send via Gmail API (service account impersonating team@digitalonda.com)
+ * 2. Send via Gmail API (service account impersonating GMAIL_SEND_AS address)
  * 3. Update draft status to 'sent' with gmail_id
  * 4. Log outbound message to channel (if linked)
  * 5. Log to agent_activity for audit
