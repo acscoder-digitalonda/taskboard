@@ -7,9 +7,19 @@ node_modules/
 .next/
 out/
 
+# expo
+.expo/
+dist/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
 # production
 build/
-dist/
 
 # env files
 .env
@@ -36,3 +46,6 @@ next-env.d.ts
 
 # vercel
 .vercel
+
+# turbo
+.turbo
