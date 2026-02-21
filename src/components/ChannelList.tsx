@@ -2,9 +2,10 @@
 
 import { useChannels } from "@/lib/messaging-hooks";
 import { useUsers } from "@/lib/hooks";
-import { Channel } from "@/types";
-import { Hash, Lock, MessageSquare, Plus, Users, Search } from "lucide-react";
-import { useState, useMemo } from "react";
+import { Channel, ChannelMember, User } from "@/types";
+import { Hash, Lock, MessageSquare, Plus, Users, Search, PenSquare } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { messagingStore } from "@/lib/messaging-store";
 
 interface ChannelListProps {
   userId: string;
@@ -25,6 +26,51 @@ export default function ChannelList({
   const users = useUsers();
   const [search, setSearch] = useState("");
 
+  // Fetch members for DM channels to resolve names
+  const [dmMemberMap, setDmMemberMap] = useState<Map<string, ChannelMember[]>>(new Map());
+
+  useEffect(() => {
+    const dmChannels = channels.filter((c) => c.type === "direct");
+    if (dmChannels.length === 0) return;
+
+    Promise.all(
+      dmChannels.map(async (ch) => {
+        const members = await messagingStore.getChannelMembers(ch.id);
+        return [ch.id, members] as [string, ChannelMember[]];
+      })
+    ).then((entries) => {
+      setDmMemberMap(new Map(entries));
+    });
+  }, [channels]);
+
+  function getDMName(channel: Channel): string {
+    const members = dmMemberMap.get(channel.id);
+    if (members) {
+      const other = members.find((m) => m.user_id !== userId);
+      if (other?.user?.name) return other.user.name;
+    }
+    // Fallback: check last_message sender
+    if (channel.last_message?.sender_id) {
+      const sender = users.find((u) => u.id === channel.last_message?.sender_id);
+      if (sender && sender.id !== userId) return sender.name;
+    }
+    if (channel.name) return channel.name;
+    return "Direct Message";
+  }
+
+  function getDMUser(channel: Channel): User | undefined {
+    const members = dmMemberMap.get(channel.id);
+    if (members) {
+      const other = members.find((m) => m.user_id !== userId);
+      if (other?.user) return other.user;
+    }
+    if (channel.last_message?.sender_id) {
+      const sender = users.find((u) => u.id === channel.last_message?.sender_id);
+      if (sender && sender.id !== userId) return sender;
+    }
+    return undefined;
+  }
+
   const publicChannels = useMemo(
     () => channels.filter((c) => c.type === "public" || c.type === "private"),
     [channels]
@@ -42,23 +88,11 @@ export default function ChannelList({
         (c) => c.name?.toLowerCase().includes(q)
       ),
       dmChannels: dmChannels.filter((c) => {
-        // For DMs, search by the other user's name
-        const otherName = getDMName(c, userId, users);
+        const otherName = getDMName(c);
         return otherName.toLowerCase().includes(q);
       }),
     };
-  }, [search, publicChannels, dmChannels, userId, users]);
-
-  function getDMName(
-    channel: Channel,
-    currentUserId: string,
-    allUsers: { id: string; name: string }[]
-  ): string {
-    // We'd need members to determine the other user
-    // For now use last_message sender or channel metadata
-    if (channel.name) return channel.name;
-    return "Direct Message";
-  }
+  }, [search, publicChannels, dmChannels, userId, users, dmMemberMap]);
 
   function formatTime(dateStr: string): string {
     const date = new Date(dateStr);
@@ -83,17 +117,17 @@ export default function ChannelList({
           <div className="flex gap-1">
             <button
               onClick={onNewChannel}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-cyan-600 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-cyan-600 transition-colors"
               title="New channel"
             >
               <Hash size={16} />
             </button>
             <button
               onClick={onNewDM}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-cyan-600 transition-colors"
+              className="p-1.5 rounded-lg bg-cyan-50 text-cyan-600 hover:bg-cyan-100 transition-colors"
               title="New message"
             >
-              <Plus size={16} />
+              <PenSquare size={16} />
             </button>
           </div>
         </div>
@@ -131,7 +165,7 @@ export default function ChannelList({
                 label={ch.name || "Unnamed"}
                 icon={ch.type === "private" ? <Lock size={14} /> : <Hash size={14} />}
                 time={ch.last_message ? formatTime(ch.last_message.created_at) : ""}
-                preview={ch.last_message?.body || ""}
+                preview={ch.last_message?.body?.startsWith("__file:") ? "📎 File" : ch.last_message?.body?.replace(/__file:\{.*\}$/, "").trim() || ""}
                 unread={ch.unread_count || 0}
                 onClick={() => onSelectChannel(ch.id)}
               />
@@ -146,19 +180,37 @@ export default function ChannelList({
               <Users size={12} />
               Direct Messages
             </div>
-            {filtered.dmChannels.map((ch) => (
-              <ChannelRow
-                key={ch.id}
-                channel={ch}
-                isActive={ch.id === activeChannelId}
-                label={getDMName(ch, userId, users)}
-                icon={<MessageSquare size={14} />}
-                time={ch.last_message ? formatTime(ch.last_message.created_at) : ""}
-                preview={ch.last_message?.body || ""}
-                unread={ch.unread_count || 0}
-                onClick={() => onSelectChannel(ch.id)}
-              />
-            ))}
+            {filtered.dmChannels.map((ch) => {
+              const dmUser = getDMUser(ch);
+              return (
+                <ChannelRow
+                  key={ch.id}
+                  channel={ch}
+                  isActive={ch.id === activeChannelId}
+                  label={getDMName(ch)}
+                  icon={
+                    dmUser ? (
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden"
+                        style={{ backgroundColor: dmUser.color }}
+                      >
+                        {dmUser.avatar_url ? (
+                          <img src={dmUser.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          dmUser.initials
+                        )}
+                      </div>
+                    ) : (
+                      <MessageSquare size={14} />
+                    )
+                  }
+                  time={ch.last_message ? formatTime(ch.last_message.created_at) : ""}
+                  preview={ch.last_message?.body?.startsWith("__file:") ? "📎 File" : ch.last_message?.body || ""}
+                  unread={ch.unread_count || 0}
+                  onClick={() => onSelectChannel(ch.id)}
+                />
+              );
+            })}
           </div>
         )}
 

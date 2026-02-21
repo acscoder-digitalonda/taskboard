@@ -89,7 +89,7 @@ async function fetchOrUpsertPublicUser(session: Session): Promise<User | null> {
 }
 
 // DEV_BYPASS: Same flag as page.tsx. When true, use fallback user from DB.
-const DEV_BYPASS_AUTH = false;
+const DEV_BYPASS_AUTH = true;
 const DEV_BYPASS_USER_ID = "9ccc8eb5-7690-49c3-8f42-c09f083e6c37";
 
 const DEV_FALLBACK_USER: User = {

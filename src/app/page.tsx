@@ -34,7 +34,7 @@ export default function Home() {
 }
 
 // DEV_BYPASS: Temporarily skip auth for preview. Remove when Google Auth is configured.
-const DEV_BYPASS_AUTH = false;
+const DEV_BYPASS_AUTH = true;
 
 function LoadingScreen() {
   return (
@@ -218,7 +218,12 @@ function AppShell() {
       <main className="max-w-[1600px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* Messages view (full width, no chat sidebar) */}
         {viewMode === "messages" ? (
-          <MessagingView />
+          <MessagingView
+            onOpenTask={(taskId) => {
+              const task = tasks.find((t) => t.id === taskId);
+              if (task) setSelectedTask(task);
+            }}
+          />
         ) : (
           <>
             {/* Filters (not shown on My Day) */}
