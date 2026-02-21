@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { parseTaskInput, store } from "@/lib/store";
+import { apiFetch } from "@/lib/api-client";
 import { getUserById, getProjectById } from "@/lib/utils";
 import { Task, TaskStatus } from "@/types";
 import {
@@ -106,9 +107,8 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
     // Send notification based on selected level
     if (notifyLevel !== "none" && task.assignee_id !== currentUserId) {
       try {
-        await fetch("/api/notifications/send", {
+        await apiFetch("/api/notifications/send", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: task.assignee_id,
             type: "task_assigned",

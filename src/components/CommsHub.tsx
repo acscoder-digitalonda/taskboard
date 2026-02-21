@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useProjects, useTasks, useUsers } from "@/lib/hooks";
 import { useAuth } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-client";
 import { supabase } from "@/lib/supabase";
 import { getProjectFiles, formatFileSize, formatRelativeTime, getFileUrl, getFileIconName } from "@/lib/files";
 import { FileAttachment, Task, Project, Channel, Message, AgentActivity } from "@/types";
@@ -112,7 +113,7 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
         .order("created_at", { ascending: false })
         .limit(50),
       // Load pending email drafts
-      fetch("/api/email/drafts?status=draft")
+      apiFetch("/api/email/drafts?status=draft")
         .then((r) => r.json())
         .catch(() => ({ drafts: [] })),
       // Load files for each project (just counts + recent)
@@ -195,7 +196,7 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
 
   const reloadDrafts = async () => {
     try {
-      const res = await fetch("/api/email/drafts?status=draft");
+      const res = await apiFetch("/api/email/drafts?status=draft");
       const data = await res.json();
       setDrafts(data.drafts || []);
     } catch { /* ignore */ }

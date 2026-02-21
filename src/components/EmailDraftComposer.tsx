@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-client";
 import { EmailDraft } from "@/types";
 import {
   Mail,
@@ -88,9 +89,8 @@ export default function EmailDraftComposer({
     try {
       if (draftId) {
         // Update existing
-        const res = await fetch(`/api/email/drafts/${draftId}`, {
+        const res = await apiFetch(`/api/email/drafts/${draftId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             to_email: toEmail,
             to_name: toName || null,
@@ -106,9 +106,8 @@ export default function EmailDraftComposer({
         onDraftSaved?.(data.draft);
       } else {
         // Create new
-        const res = await fetch("/api/email/drafts", {
+        const res = await apiFetch("/api/email/drafts", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             to_email: toEmail,
             to_name: toName || null,
@@ -189,9 +188,8 @@ export default function EmailDraftComposer({
       }
 
       // Now send
-      const res = await fetch("/api/email/send", {
+      const res = await apiFetch("/api/email/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           draft_id: currentDraftId,
           sent_by: currentUser?.id,
@@ -216,7 +214,7 @@ export default function EmailDraftComposer({
   const handleDiscard = async () => {
     if (draftId) {
       try {
-        await fetch(`/api/email/drafts/${draftId}`, { method: "DELETE" });
+        await apiFetch(`/api/email/drafts/${draftId}`, { method: "DELETE" });
       } catch {
         // Ignore delete errors
       }
