@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTasks, useFilters } from "@/lib/hooks";
 import { Task, ViewMode } from "@/types";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import LoginPage from "@/components/LoginPage";
 import BoardView from "@/components/BoardView";
 import ListView from "@/components/ListView";
@@ -28,9 +29,11 @@ import {
 
 export default function Home() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
