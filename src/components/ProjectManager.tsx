@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useProjects } from "@/lib/hooks";
 import { useTasks } from "@/lib/hooks";
 import { Plus, Trash2, X, FolderOpen, Edit3, Check, Paperclip } from "lucide-react";
@@ -19,6 +19,12 @@ const COLOR_OPTIONS = [
 export default function ProjectManager({ onClose, currentUserId }: ProjectManagerProps) {
   const { projects, addProject, updateProject, deleteProject } = useProjects();
   const { tasks } = useTasks();
+
+  // M4: Lock body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(COLOR_OPTIONS[0]);
   const [editingId, setEditingId] = useState<string | null>(null);

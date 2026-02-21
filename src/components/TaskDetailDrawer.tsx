@@ -86,6 +86,23 @@ export default function TaskDetailDrawer({
     }
   }, []);
 
+  // M4: Lock body scroll while drawer is open
+  useEffect(() => {
+    if (!task) return;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, [task]);
+
+  // M8: Close drawer on Escape key
+  useEffect(() => {
+    if (!task) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [task, onClose]);
+
   if (!task) return null;
 
   const user = getUserById(task.assignee_id);

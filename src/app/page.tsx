@@ -201,7 +201,7 @@ function AppShell() {
               style={{ backgroundColor: user.color }}
             >
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={user.avatar_url} alt={`${user.name} avatar`} className="w-full h-full object-cover" />
               ) : (
                 user.initials
               )}

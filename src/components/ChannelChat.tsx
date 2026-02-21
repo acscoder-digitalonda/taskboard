@@ -477,7 +477,7 @@ function MessageBubble({
           {message.is_ai ? (
             <Bot size={16} />
           ) : sender?.avatar_url ? (
-            <img src={sender.avatar_url} alt="" className="w-full h-full object-cover" />
+            <img src={sender.avatar_url} alt={`${sender.name} avatar`} className="w-full h-full object-cover" />
           ) : (
             sender?.initials || "?"
           )}

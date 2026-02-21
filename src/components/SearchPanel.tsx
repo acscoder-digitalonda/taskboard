@@ -31,6 +31,9 @@ export default function SearchPanel({ onSelectResult, onClose }: SearchPanelProp
 
   useEffect(() => {
     inputRef.current?.focus();
+    // M4: Lock body scroll while search panel is open
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
   }, []);
 
   const doSearch = useCallback(

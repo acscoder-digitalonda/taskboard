@@ -195,7 +195,7 @@ export default function ChannelList({
                         style={{ backgroundColor: dmUser.color }}
                       >
                         {dmUser.avatar_url ? (
-                          <img src={dmUser.avatar_url} alt="" className="w-full h-full object-cover" />
+                          <img src={dmUser.avatar_url} alt={`${dmUser.name} avatar`} className="w-full h-full object-cover" />
                         ) : (
                           dmUser.initials
                         )}
