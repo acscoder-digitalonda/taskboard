@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Task, TaskStatus } from "@/types";
 import { getUserById, getProjectById, formatDue, isOverdue } from "@/lib/utils";
 import { store } from "@/lib/store";
@@ -22,7 +23,7 @@ interface TaskCardProps {
   onClickCard?: (task: Task) => void;
 }
 
-export default function TaskCard({
+function TaskCard({
   task,
   compact = false,
   showDragHandle = false,
@@ -152,3 +153,6 @@ export default function TaskCard({
     </div>
   );
 }
+
+// L1: Memoize to prevent re-renders when parent updates but task props are unchanged
+export default memo(TaskCard);

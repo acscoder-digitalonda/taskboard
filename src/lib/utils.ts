@@ -14,12 +14,14 @@ export function formatDue(dateStr: string | undefined): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
-  const diffHours = Math.round(diffMs / 3600000);
-  const diffDays = Math.round(diffMs / 86400000);
+  // L4: Use floor instead of round to prevent misleading rounding (e.g. 29min → "1h")
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
 
   if (diffHours < 0) {
-    if (diffDays === 0 || diffDays === -1) return "Overdue";
-    return `${Math.abs(diffDays)}d overdue`;
+    const overdueDays = Math.ceil(Math.abs(diffMs) / 86400000);
+    if (overdueDays <= 1) return "Overdue";
+    return `${overdueDays}d overdue`;
   }
   if (diffHours < 1) return "< 1h";
   if (diffHours < 24) return `${diffHours}h`;
@@ -57,3 +59,9 @@ export const STATUS_COLORS: Record<string, string> = {
   waiting: "#FFD600",
   done: "#4CAF50",
 };
+
+// L7: Shared accent color palette (used by store, auth, ProjectManager)
+export const ACCENT_COLORS = [
+  "#00BCD4", "#E91E63", "#FFD600", "#9C27B0", "#FF5722",
+  "#4CAF50", "#2196F3", "#FF9800", "#795548", "#607D8B",
+];

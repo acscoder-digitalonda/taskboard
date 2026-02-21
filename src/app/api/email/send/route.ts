@@ -5,6 +5,10 @@ import {
   getAuthenticatedUserId,
   unauthorizedResponse,
 } from "@/lib/api-auth";
+import { rateLimit } from "@/lib/rate-limit";
+
+// L11: Rate limit email sends to 10 per minute
+const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 
 /**
  * POST /api/email/send — Send a draft via Gmail API
@@ -23,6 +27,9 @@ import {
  */
 export async function POST(req: NextRequest) {
   try {
+    const limited = limiter.check(req);
+    if (limited) return limited;
+
     const userId = await getAuthenticatedUserId(req);
     if (!userId) return unauthorizedResponse();
 

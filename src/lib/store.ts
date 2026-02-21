@@ -3,6 +3,7 @@
 import { Task, TaskStatus, Project, TaskSection, User } from "@/types";
 import { supabase } from "./supabase";
 import { deleteProjectFiles } from "./files";
+import { ACCENT_COLORS } from "./utils";
 
 type Listener = () => void;
 type ErrorListener = (message: string) => void;
@@ -39,11 +40,6 @@ function emitProjects() {
 function emitUsers() {
   userListeners.forEach((fn) => fn());
 }
-
-const ACCENT_COLORS = [
-  "#00BCD4", "#E91E63", "#FFD600", "#9C27B0", "#FF5722",
-  "#4CAF50", "#2196F3", "#FF9800", "#795548", "#607D8B",
-];
 
 // ---- Supabase data fetching ----
 

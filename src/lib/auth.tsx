@@ -4,11 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { User } from "@/types";
-
-const ACCENT_COLORS = [
-  "#00BCD4", "#E91E63", "#FFD600", "#9C27B0", "#FF5722",
-  "#4CAF50", "#2196F3", "#FF9800", "#795548", "#607D8B",
-];
+import { ACCENT_COLORS } from "./utils";
 
 function generateInitials(name: string): string {
   const parts = name.trim().split(/\s+/);

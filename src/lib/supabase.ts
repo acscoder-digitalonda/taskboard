@@ -8,9 +8,12 @@ export const isSupabaseConfigured =
 
 function createSupabaseClient(): SupabaseClient {
   if (!isSupabaseConfigured) {
-    // Return a dummy client during build / when env vars aren't set.
-    // All runtime calls will fail gracefully until real credentials are provided.
-    console.warn("Supabase not configured — using placeholder client");
+    // L8: Clearer warning during build / when env vars aren't set.
+    console.warn(
+      "Supabase not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local. " +
+      "Using placeholder client — all DB calls will fail."
+    );
     return createClient("https://placeholder.supabase.co", "placeholder");
   }
   return createClient(supabaseUrl, supabaseAnonKey);

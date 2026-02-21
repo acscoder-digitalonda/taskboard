@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore, useCallback, useState } from "react";
 import { store } from "./store";
-import { Task, TaskStatus, ViewMode } from "@/types";
+import { Task, TaskStatus } from "@/types";
 
 export function useTasks() {
   const tasks = useSyncExternalStore(store.subscribe, store.getTasks, store.getTasks);
@@ -74,10 +74,7 @@ export function useProjects() {
   };
 }
 
-export function useViewMode() {
-  const [viewMode, setViewMode] = useState<ViewMode>("board");
-  return { viewMode, setViewMode };
-}
+// L6: Removed unused useViewMode hook
 
 export function useFilters() {
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useProjects } from "@/lib/hooks";
 import { useTasks } from "@/lib/hooks";
+import { ACCENT_COLORS } from "@/lib/utils";
 import { Plus, Trash2, X, FolderOpen, Edit3, Check, Paperclip } from "lucide-react";
 import ProjectFileBrowser from "./ProjectFileBrowser";
 
@@ -11,10 +12,8 @@ interface ProjectManagerProps {
   currentUserId?: string;
 }
 
-const COLOR_OPTIONS = [
-  "#00BCD4", "#E91E63", "#FFD600", "#9C27B0", "#FF5722",
-  "#4CAF50", "#2196F3", "#FF9800", "#795548", "#607D8B",
-];
+// L7: Use shared ACCENT_COLORS from utils
+const COLOR_OPTIONS = ACCENT_COLORS;
 
 export default function ProjectManager({ onClose, currentUserId }: ProjectManagerProps) {
   const { projects, addProject, updateProject, deleteProject } = useProjects();

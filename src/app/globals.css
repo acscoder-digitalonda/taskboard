@@ -22,6 +22,12 @@ body {
 }
 
 /* Scrollbar styling */
+/* L5: Firefox scrollbar support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
