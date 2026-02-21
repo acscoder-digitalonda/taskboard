@@ -5,6 +5,7 @@ import { useMessages, useChannelMembers } from "@/lib/messaging-hooks";
 import { useUsers } from "@/lib/hooks";
 import { uploadFile, formatFileSize, getFileIconName, getFileUrl } from "@/lib/files";
 import { Message, User, FileAttachment } from "@/types";
+import EmailDraftComposer from "./EmailDraftComposer";
 import {
   ArrowLeft,
   Send,
@@ -29,6 +30,8 @@ import {
   Archive,
   Download,
   Loader2,
+  Mail,
+  CheckCircle2,
 } from "lucide-react";
 
 interface ChannelChatProps {
@@ -55,6 +58,15 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [emailReplyDefaults, setEmailReplyDefaults] = useState<{
+    to_email: string;
+    to_name?: string;
+    subject: string;
+    channel_id: string;
+    gmail_thread_id?: string;
+    gmail_message_id?: string;
+    in_reply_to_message_id?: string;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,6 +108,25 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
       handleSend();
     }
   };
+
+  const handleEmailReply = useCallback((msg: Message) => {
+    const meta = msg.metadata || {};
+    const fromEmail = (meta.source_email as string) || (meta.from_email as string) || "";
+    const fromName = (meta.from_name as string) || "";
+    const emailSubject = (meta.email_subject as string) || (meta.subject as string) || "";
+    const threadId = (meta.gmail_thread_id as string) || "";
+    const messageId = (meta.gmail_message_id as string) || "";
+
+    setEmailReplyDefaults({
+      to_email: fromEmail,
+      to_name: fromName || undefined,
+      subject: emailSubject.startsWith("Re:") ? emailSubject : `Re: ${emailSubject}`,
+      channel_id: channelId,
+      gmail_thread_id: threadId || undefined,
+      gmail_message_id: messageId || undefined,
+      in_reply_to_message_id: msg.id,
+    });
+  }, [channelId]);
 
   const [uploading, setUploading] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
@@ -277,6 +308,7 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
                   onEdit={() => startEdit(msg)}
                   onDelete={() => deleteMessage(msg.id)}
                   onReact={(emoji) => toggleReaction(msg.id, emoji)}
+                  onEmailReply={() => handleEmailReply(msg)}
                 />
               );
             })}
@@ -359,6 +391,16 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
           </button>
         </div>
       </div>
+
+      {/* Email reply composer overlay */}
+      {emailReplyDefaults && (
+        <div className="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center p-4">
+          <EmailDraftComposer
+            defaults={emailReplyDefaults}
+            onClose={() => setEmailReplyDefaults(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -379,6 +421,7 @@ function MessageBubble({
   onEdit,
   onDelete,
   onReact,
+  onEmailReply,
 }: {
   message: Message;
   sender: User | null;
@@ -393,6 +436,7 @@ function MessageBubble({
   onEdit: () => void;
   onDelete: () => void;
   onReact: (emoji: string) => void;
+  onEmailReply?: () => void;
 }) {
   const [showActions, setShowActions] = useState(false);
 
@@ -400,6 +444,11 @@ function MessageBubble({
     hour: "numeric",
     minute: "2-digit",
   });
+
+  const meta = message.metadata || {};
+  const isEmailReceived = meta.type === "email_received" || meta.type === "email_ingested";
+  const isEmailSent = meta.type === "email_sent";
+  const isEmail = isEmailReceived || isEmailSent;
 
   if (message.is_system) {
     return (
@@ -445,6 +494,18 @@ function MessageBubble({
             <span className="text-sm font-bold text-gray-900">
               {message.is_ai ? "🤖 AI Assistant" : sender?.name || "Unknown"}
             </span>
+            {isEmailReceived && (
+              <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                <Mail size={9} />
+                Email
+              </span>
+            )}
+            {isEmailSent && (
+              <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                <CheckCircle2 size={9} />
+                Sent
+              </span>
+            )}
             <span className="text-xs text-gray-400">{time}</span>
           </div>
         )}
@@ -489,6 +550,15 @@ function MessageBubble({
       {/* Hover actions */}
       {showActions && !isEditing && (
         <div className="flex items-start gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {isEmailReceived && onEmailReply && (
+            <button
+              onClick={onEmailReply}
+              className="p-1 rounded hover:bg-cyan-50 text-cyan-500 hover:text-cyan-600"
+              title="Reply via Email"
+            >
+              <Mail size={14} />
+            </button>
+          )}
           <button
             onClick={onReply}
             className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"

@@ -11,8 +11,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  * Webhook for inbound emails to team@digitalonda.com.
  * Compatible with SendGrid Inbound Parse, Mailgun, or Postmark.
  *
- * Stores the email as a message in the appropriate project channel
- * and logs it for the Comms Hub. No AI processing — just capture and store.
+ * Stores the email as a message in the appropriate project channel,
+ * logs it for the Comms Hub, and auto-creates a draft reply.
  *
  * Body (JSON):
  *   from: string          — sender email
@@ -21,10 +21,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
  *   text: string          — plain text body
  *   html?: string         — HTML body (optional)
  *   project_id?: string   — link to project (auto-detect from subject/sender)
+ *   gmail_thread_id?: string — Gmail thread ID for threading
+ *   gmail_message_id?: string — Gmail message ID for In-Reply-To
  *   attachments?: Array<{ filename: string, content_type: string, size: number, url: string }>
  *
- * Also supports multipart/form-data from SendGrid Inbound Parse:
- *   Fields: from, to, subject, text, html, envelope, attachments
+ * Also supports multipart/form-data from SendGrid Inbound Parse.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -34,6 +35,8 @@ export async function POST(req: NextRequest) {
     let textBody: string;
     let htmlBody: string | null = null;
     let projectId: string | null = null;
+    let gmailThreadId: string | null = null;
+    let gmailMessageId: string | null = null;
 
     const contentType = req.headers.get("content-type") || "";
 
@@ -45,8 +48,9 @@ export async function POST(req: NextRequest) {
       textBody = body.text || body.plain || "";
       htmlBody = body.html || null;
       projectId = body.project_id || null;
+      gmailThreadId = body.gmail_thread_id || null;
+      gmailMessageId = body.gmail_message_id || null;
     } else if (contentType.includes("multipart/form-data")) {
-      // SendGrid Inbound Parse format
       const formData = await req.formData();
       from = (formData.get("from") as string) || "";
       to = (formData.get("to") as string) || "";
@@ -54,7 +58,6 @@ export async function POST(req: NextRequest) {
       textBody = (formData.get("text") as string) || "";
       htmlBody = (formData.get("html") as string) || null;
     } else {
-      // Try JSON fallback
       const body = await req.json().catch(() => ({}));
       from = body.from || "";
       to = body.to || "";
@@ -71,7 +74,22 @@ export async function POST(req: NextRequest) {
     const senderEmail = emailMatch[1] || from;
     const senderName = from.replace(/<.*>/, "").trim() || senderEmail;
 
-    // Auto-detect project from existing tasks/contacts
+    // ── Project matching ───────────────────────────────────
+    // 1. Check projects.client_emails array (most reliable)
+    if (!projectId) {
+      const { data: projectMatch } = await supabase
+        .from("projects")
+        .select("id")
+        .contains("client_emails", [senderEmail])
+        .limit(1)
+        .single();
+
+      if (projectMatch) {
+        projectId = projectMatch.id;
+      }
+    }
+
+    // 2. Fall back to task client field
     if (!projectId) {
       const { data: matchingTasks } = await supabase
         .from("tasks")
@@ -86,7 +104,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Find or create an email channel for this project/sender
+    // 3. Try matching by domain (e.g. client@acme.com → project with acme.com emails)
+    if (!projectId) {
+      const domain = senderEmail.split("@")[1];
+      if (domain && !["gmail.com", "yahoo.com", "hotmail.com", "outlook.com"].includes(domain)) {
+        const { data: domainProjects } = await supabase
+          .from("projects")
+          .select("id, client_emails");
+
+        if (domainProjects) {
+          for (const p of domainProjects) {
+            const emails = (p.client_emails as string[]) || [];
+            if (emails.some((e: string) => e.endsWith(`@${domain}`))) {
+              projectId = p.id;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // ── Find or create email channel ────────────────────────
     let channelId: string | null = null;
 
     if (projectId) {
@@ -102,41 +140,126 @@ export async function POST(req: NextRequest) {
 
       if (existingChannel) {
         channelId = existingChannel.id;
+      } else {
+        // Auto-create an email channel for the project
+        const { data: projectData } = await supabase
+          .from("projects")
+          .select("name")
+          .eq("id", projectId)
+          .single();
+
+        const channelName = projectData
+          ? `${projectData.name} – Email`
+          : "Email Thread";
+
+        const { data: newChannel } = await supabase
+          .from("channels")
+          .insert({
+            name: channelName,
+            type: "public",
+            project_id: projectId,
+            description: `Inbound/outbound emails for this project`,
+          })
+          .select()
+          .single();
+
+        if (newChannel) {
+          channelId = newChannel.id;
+
+          // Add all team members to the channel
+          const { data: teamUsers } = await supabase
+            .from("users")
+            .select("id")
+            .limit(20);
+
+          if (teamUsers?.length) {
+            await supabase.from("channel_members").insert(
+              teamUsers.map((u) => ({
+                channel_id: newChannel.id,
+                user_id: u.id,
+                role: "member",
+              }))
+            );
+          }
+        }
       }
     }
 
-    // Store email as a message
+    // ── Store email as channel message ─────────────────────
     const emailContent = [
       `📧 **Email from ${senderName}**`,
       `**Subject:** ${subject}`,
       "",
-      textBody.slice(0, 2000), // Limit body length
+      textBody.slice(0, 2000),
     ].join("\n");
 
-    if (channelId) {
-      await supabase.from("messages").insert({
-        channel_id: channelId,
-        sender_id: null,
-        body: emailContent,
-        is_system: false,
-        is_ai: false,
-        metadata: {
-          type: "email",
-          from: senderEmail,
-          from_name: senderName,
-          subject,
-          to,
-        },
-      });
+    let messageId: string | null = null;
 
-      // Update channel timestamp
+    if (channelId) {
+      const { data: msgData } = await supabase
+        .from("messages")
+        .insert({
+          channel_id: channelId,
+          sender_id: null,
+          body: emailContent,
+          is_system: false,
+          is_ai: false,
+          metadata: {
+            type: "email_received",
+            source_email: senderEmail,
+            from_name: senderName,
+            email_subject: subject,
+            to,
+            gmail_thread_id: gmailThreadId,
+            gmail_message_id: gmailMessageId,
+          },
+        })
+        .select("id")
+        .single();
+
+      messageId = msgData?.id || null;
+
       await supabase
         .from("channels")
         .update({ updated_at: new Date().toISOString() })
         .eq("id", channelId);
     }
 
-    // Log to agent_activity for Comms Hub display
+    // ── Auto-create draft reply ───────────────────────────
+    // Creates a placeholder draft that Katie can review and edit
+    let draftId: string | null = null;
+
+    const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
+    const replyBody = [
+      `Hi ${senderName.split(" ")[0]},`,
+      "",
+      "Thank you for your email. I'll review this and get back to you shortly.",
+      "",
+      "Best regards,",
+      "Team Digital Onda",
+    ].join("\n");
+
+    const { data: draftData } = await supabase
+      .from("email_drafts")
+      .insert({
+        channel_id: channelId,
+        project_id: projectId,
+        to_email: senderEmail,
+        to_name: senderName !== senderEmail ? senderName : null,
+        subject: replySubject,
+        body_text: replyBody,
+        in_reply_to_message_id: messageId,
+        gmail_thread_id: gmailThreadId,
+        gmail_message_id: gmailMessageId,
+        status: "draft",
+        generated_by: "ai",
+      })
+      .select("id")
+      .single();
+
+    draftId = draftData?.id || null;
+
+    // ── Log to agent_activity ─────────────────────────────
     await supabase.from("agent_activity").insert({
       agent_name: "email-inbound",
       action: "email_ingested",
@@ -150,10 +273,14 @@ export async function POST(req: NextRequest) {
         from_name: senderName,
         to,
         body_preview: textBody.slice(0, 200),
+        gmail_thread_id: gmailThreadId,
+        gmail_message_id: gmailMessageId,
+        draft_id: draftId,
+        auto_draft_created: !!draftId,
       },
     });
 
-    // Notify all team members about the incoming email
+    // ── Notify team ───────────────────────────────────────
     const { data: teamUsers } = await supabase
       .from("users")
       .select("id")
@@ -178,6 +305,8 @@ export async function POST(req: NextRequest) {
       success: true,
       channel_id: channelId,
       project_id: projectId,
+      message_id: messageId,
+      draft_id: draftId,
     });
   } catch (error) {
     console.error("Email inbound error:", error);

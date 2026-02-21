@@ -265,6 +265,34 @@ export interface SearchResult {
 }
 
 // ============================================
+// Email Draft Types
+// ============================================
+
+export type EmailDraftStatus = "draft" | "approved" | "sent" | "failed";
+
+export interface EmailDraft {
+  id: string;
+  channel_id: string | null;
+  project_id: string | null;
+  to_email: string;
+  to_name: string | null;
+  subject: string;
+  body_text: string;
+  body_html: string | null;
+  in_reply_to_message_id: string | null;
+  gmail_thread_id: string | null;
+  gmail_message_id: string | null;
+  status: EmailDraftStatus;
+  generated_by: string;
+  edited_by: string | null;
+  sent_at: string | null;
+  sent_gmail_id: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================
 // View & Navigation Types
 // ============================================
 

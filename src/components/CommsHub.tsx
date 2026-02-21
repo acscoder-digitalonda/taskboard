@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { getProjectFiles, formatFileSize, formatRelativeTime, getFileUrl, getFileIconName } from "@/lib/files";
 import { FileAttachment, Task, Project, Channel, Message, AgentActivity } from "@/types";
+import { EmailDraft } from "@/types";
+import EmailDraftComposer from "./EmailDraftComposer";
 import {
   FolderOpen,
   MessageSquare,
@@ -32,6 +34,10 @@ import {
   Paperclip,
   TrendingUp,
   X,
+  Send,
+  Edit3,
+  PenSquare,
+  Bot,
 } from "lucide-react";
 
 interface CommsHubProps {
@@ -81,6 +87,9 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
   const [projectChannels, setProjectChannels] = useState<Map<string, Channel[]>>(new Map());
   const [emailThreads, setEmailThreads] = useState<EmailThread[]>([]);
   const [agentActivity, setAgentActivity] = useState<AgentActivity[]>([]);
+  const [drafts, setDrafts] = useState<EmailDraft[]>([]);
+  const [composingDraft, setComposingDraft] = useState<EmailDraft | null>(null);
+  const [showNewCompose, setShowNewCompose] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Load project data
@@ -102,9 +111,13 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
         .select("*")
         .order("created_at", { ascending: false })
         .limit(50),
+      // Load pending email drafts
+      fetch("/api/email/drafts?status=draft")
+        .then((r) => r.json())
+        .catch(() => ({ drafts: [] })),
       // Load files for each project (just counts + recent)
       ...projects.map((p) => getProjectFiles(p.id)),
-    ]).then(([channelsRes, activityRes, ...fileResults]) => {
+    ]).then(([channelsRes, activityRes, draftsRes, ...fileResults]) => {
       // Map channels to projects
       const chMap = new Map<string, Channel[]>();
       for (const ch of channelsRes.data || []) {
@@ -136,6 +149,9 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
           channel_id: a.channel_id || undefined,
         }));
       setEmailThreads(emails);
+
+      // Set drafts
+      setDrafts((draftsRes as { drafts: EmailDraft[] }).drafts || []);
 
       setLoading(false);
     }).catch((err) => {
@@ -176,6 +192,14 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
   const selectedSummary = selectedProjectId
     ? summaries.find((s) => s.project.id === selectedProjectId)
     : null;
+
+  const reloadDrafts = async () => {
+    try {
+      const res = await fetch("/api/email/drafts?status=draft");
+      const data = await res.json();
+      setDrafts(data.drafts || []);
+    } catch { /* ignore */ }
+  };
 
   if (loading) {
     return (
@@ -237,20 +261,45 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
           <AllProjectsOverview
             summaries={summaries}
             emailThreads={emailThreads}
+            drafts={drafts}
             onSelectProject={setSelectedProjectId}
             onOpenChannel={onOpenChannel}
+            onComposeDraft={(d) => setComposingDraft(d)}
           />
         ) : (
           <ProjectDetail
             summary={selectedSummary}
             tasks={tasks.filter((t) => t.project_id === selectedSummary.project.id)}
             users={users}
+            drafts={drafts.filter((d) => d.project_id === selectedSummary.project.id)}
             onOpenChannel={onOpenChannel}
             onOpenTask={onOpenTask}
+            onComposeDraft={(d) => setComposingDraft(d)}
+            onNewCompose={() => setShowNewCompose(true)}
             onClose={() => setSelectedProjectId(null)}
           />
         )}
       </div>
+
+      {/* Compose overlay */}
+      {(composingDraft || showNewCompose) && (
+        <div className="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center p-4">
+          <EmailDraftComposer
+            draft={composingDraft || undefined}
+            defaults={
+              showNewCompose && selectedSummary
+                ? { project_id: selectedSummary.project.id }
+                : undefined
+            }
+            onClose={() => {
+              setComposingDraft(null);
+              setShowNewCompose(false);
+              reloadDrafts();
+            }}
+            onDraftSaved={() => reloadDrafts()}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -260,16 +309,58 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
 function AllProjectsOverview({
   summaries,
   emailThreads,
+  drafts,
   onSelectProject,
   onOpenChannel,
+  onComposeDraft,
 }: {
   summaries: ProjectSummary[];
   emailThreads: EmailThread[];
+  drafts: EmailDraft[];
   onSelectProject: (id: string) => void;
   onOpenChannel: (id: string) => void;
+  onComposeDraft: (d: EmailDraft) => void;
 }) {
   return (
     <div className="p-4 space-y-4">
+      {/* Pending drafts */}
+      {drafts.length > 0 && (
+        <div>
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Edit3 size={12} />
+            Draft Replies ({drafts.length})
+          </h4>
+          <div className="space-y-1">
+            {drafts.slice(0, 5).map((draft) => (
+              <button
+                key={draft.id}
+                onClick={() => onComposeDraft(draft)}
+                className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-cyan-50/50 bg-yellow-50/30 border border-yellow-100/50 transition-colors"
+              >
+                <div className="w-7 h-7 rounded-lg bg-yellow-50 flex items-center justify-center flex-shrink-0">
+                  {draft.generated_by === "ai" ? (
+                    <Bot size={13} className="text-purple-500" />
+                  ) : (
+                    <Edit3 size={13} className="text-yellow-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {draft.subject}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">
+                    To: {draft.to_name || draft.to_email}
+                  </p>
+                </div>
+                <span className="text-xs text-yellow-600 font-semibold flex-shrink-0">
+                  Review
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Overview cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {summaries.map((s) => (
@@ -409,15 +500,21 @@ function ProjectDetail({
   summary,
   tasks,
   users,
+  drafts,
   onOpenChannel,
   onOpenTask,
+  onComposeDraft,
+  onNewCompose,
   onClose,
 }: {
   summary: ProjectSummary;
   tasks: Task[];
   users: { id: string; name: string; color: string; initials: string }[];
+  drafts: EmailDraft[];
   onOpenChannel: (id: string) => void;
   onOpenTask: (id: string) => void;
+  onComposeDraft: (d: EmailDraft) => void;
+  onNewCompose: () => void;
   onClose: () => void;
 }) {
   const { project } = summary;
@@ -600,6 +697,55 @@ function ProjectDetail({
           </div>
         </div>
       )}
+
+      {/* Draft replies */}
+      {drafts.length > 0 && (
+        <div>
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Edit3 size={12} />
+            Draft Replies ({drafts.length})
+          </h4>
+          <div className="space-y-1">
+            {drafts.map((draft) => (
+              <button
+                key={draft.id}
+                onClick={() => onComposeDraft(draft)}
+                className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-cyan-50/50 bg-yellow-50/30 border border-yellow-100/50 transition-colors"
+              >
+                <div className="w-7 h-7 rounded-lg bg-yellow-50 flex items-center justify-center flex-shrink-0">
+                  {draft.generated_by === "ai" ? (
+                    <Bot size={13} className="text-purple-500" />
+                  ) : (
+                    <Edit3 size={13} className="text-yellow-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {draft.subject}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">
+                    To: {draft.to_name || draft.to_email}
+                  </p>
+                </div>
+                <span className="text-xs text-yellow-600 font-semibold flex-shrink-0">
+                  Review →
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Compose new email */}
+      <div>
+        <button
+          onClick={onNewCompose}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-cyan-600 hover:bg-cyan-50 transition-colors"
+        >
+          <PenSquare size={14} />
+          Compose Email
+        </button>
+      </div>
 
       {/* Email threads */}
       {summary.recentEmails.length > 0 && (
