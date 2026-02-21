@@ -1,11 +1,11 @@
-import { View, Text, ScrollView, FlatList, StyleSheet, Pressable } from 'react-native';
+import { View, Text, ScrollView, FlatList, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, typography, spacing, borderRadius } from '../../theme/tokens';
 import TaskCard from '../../components/TaskCard';
 import EmptyState from '../../components/EmptyState';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 const COLUMNS = [
   { key: 'backlog', label: 'Backlog', color: colors.status.backlog },
@@ -45,12 +45,9 @@ export default function BoardScreen() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     const [taskRes, userRes, projRes] = await Promise.all([
       supabase.from('tasks').select('*').order('sort_order', { ascending: true }),
       supabase.from('users').select('id, name, initials, color'),
@@ -60,6 +57,51 @@ export default function BoardScreen() {
     setUsers(userRes.data || []);
     setProjects(projRes.data || []);
     setLoading(false);
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  }, [fetchData]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Realtime subscription for tasks table
+  useEffect(() => {
+    const channel = supabase
+      .channel('tasks-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        () => fetchData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchData]);
+
+  function computeDueLabel(dueAt?: string): string | undefined {
+    if (!dueAt) return undefined;
+    const now = new Date();
+    const due = new Date(dueAt);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const diffDays = Math.round((dueDay.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays === -1) return 'Yesterday';
+    return due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function computeIsOverdue(dueAt?: string, status?: string): boolean {
+    if (!dueAt || status === 'done') return false;
+    return new Date(dueAt) < new Date();
   }
 
   function getUser(id: string) { return users.find(u => u.id === id); }
@@ -74,63 +116,89 @@ export default function BoardScreen() {
   }
 
   return (
-    <ScrollView
-      horizontal
-      pagingEnabled={false}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-      style={styles.container}
-    >
-      {COLUMNS.map(col => {
-        const columnTasks = tasks
-          .filter(t => t.status === col.key)
-          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.outerContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary[500]}
+            colors={[colors.primary[500]]}
+          />
+        }
+      >
+        <ScrollView
+          horizontal
+          pagingEnabled={false}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          nestedScrollEnabled
+        >
+          {COLUMNS.map(col => {
+            const columnTasks = tasks
+              .filter(t => t.status === col.key)
+              .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-        return (
-          <View key={col.key} style={styles.column}>
-            <View style={styles.columnHeader}>
-              <View style={[styles.statusDot, { backgroundColor: col.color }]} />
-              <Text style={styles.columnTitle}>{col.label}</Text>
-              <View style={styles.countBadge}>
-                <Text style={styles.countText}>{columnTasks.length}</Text>
-              </View>
-            </View>
-            <FlatList
-              data={columnTasks}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => {
-                const user = getUser(item.assignee_id);
-                const project = getProject(item.project_id);
-                return (
-                  <TaskCard
-                    title={item.title}
-                    status={item.status}
-                    assigneeName={user?.name}
-                    assigneeColor={user?.color}
-                    assigneeInitials={user?.initials}
-                    projectName={project?.name}
-                    projectColor={project?.color}
-                    onPress={() => router.push(`/task/${item.id}`)}
-                  />
-                );
-              }}
-              ListEmptyComponent={
-                <View style={styles.emptyColumn}>
-                  <Text style={styles.emptyText}>No tasks</Text>
+            return (
+              <View key={col.key} style={styles.column}>
+                <View style={styles.columnHeader}>
+                  <View style={[styles.statusDot, { backgroundColor: col.color }]} />
+                  <Text style={styles.columnTitle}>{col.label}</Text>
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countText}>{columnTasks.length}</Text>
+                  </View>
                 </View>
-              }
-              contentContainerStyle={styles.columnContent}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-        );
-      })}
-    </ScrollView>
+                <FlatList
+                  data={columnTasks}
+                  keyExtractor={item => item.id}
+                  renderItem={({ item }) => {
+                    const user = getUser(item.assignee_id);
+                    const project = getProject(item.project_id);
+                    return (
+                      <TaskCard
+                        title={item.title}
+                        status={item.status}
+                        assigneeName={user?.name}
+                        assigneeColor={user?.color}
+                        assigneeInitials={user?.initials}
+                        projectName={project?.name}
+                        projectColor={project?.color}
+                        dueLabel={computeDueLabel(item.due_at)}
+                        isOverdue={computeIsOverdue(item.due_at, item.status)}
+                        onPress={() => router.push(`/task/${item.id}`)}
+                      />
+                    );
+                  }}
+                  ListEmptyComponent={
+                    <View style={styles.emptyColumn}>
+                      <Text style={styles.emptyText}>No tasks</Text>
+                    </View>
+                  }
+                  contentContainerStyle={styles.columnContent}
+                  showsVerticalScrollIndicator={false}
+                />
+              </View>
+            );
+          })}
+        </ScrollView>
+      </ScrollView>
+
+      {/* Floating Action Button */}
+      <Pressable
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+        onPress={() => router.push('/task/new')}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray[50] },
+  outerContent: { flexGrow: 1 },
   scrollContent: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: spacing.md },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontFamily: typography.fontFamily.medium, color: colors.gray[500] },
@@ -172,4 +240,22 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   emptyText: { fontFamily: typography.fontFamily.regular, color: colors.gray[400], fontSize: typography.fontSize.sm },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+  fabPressed: { backgroundColor: colors.primary[600], transform: [{ scale: 0.95 }] },
+  fabText: { color: colors.white, fontSize: 28, fontFamily: typography.fontFamily.bold, marginTop: -2 },
 });

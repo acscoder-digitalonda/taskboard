@@ -9,6 +9,28 @@ import { useEffect, useState, useCallback } from 'react';
 
 type SortKey = 'priority' | 'title' | 'due_at' | 'status';
 
+function computeDueLabel(dueAt: string | null | undefined): string | undefined {
+  if (!dueAt) return undefined;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const due = new Date(dueAt);
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diffMs = dueDay.getTime() - today.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays === -1) return 'Yesterday';
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[due.getMonth()]} ${due.getDate()}`;
+}
+
+function computeIsOverdue(dueAt: string | null | undefined, status: string): boolean {
+  if (!dueAt || status === 'done') return false;
+  return new Date(dueAt) < new Date();
+}
+
 export default function ListScreen() {
   const router = useRouter();
   const [tasks, setTasks] = useState<any[]>([]);
@@ -32,6 +54,22 @@ export default function ListScreen() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Supabase realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('tasks-list-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        () => fetchData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -87,6 +125,8 @@ export default function ListScreen() {
         renderItem={({ item }) => {
           const user = getUser(item.assignee_id);
           const project = getProject(item.project_id);
+          const dueLabel = computeDueLabel(item.due_at);
+          const isOverdue = computeIsOverdue(item.due_at, item.status);
           return (
             <TaskCard
               title={item.title}
@@ -96,6 +136,8 @@ export default function ListScreen() {
               assigneeInitials={user?.initials}
               projectName={project?.name}
               projectColor={project?.color}
+              dueLabel={dueLabel}
+              isOverdue={isOverdue}
               onPress={() => router.push(`/task/${item.id}`)}
             />
           );
