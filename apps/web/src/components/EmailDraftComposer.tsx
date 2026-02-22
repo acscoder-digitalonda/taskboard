@@ -19,6 +19,9 @@ import {
   Bot,
   User as UserIcon,
   Clock,
+  Tag,
+  Brain,
+  LinkIcon,
 } from "lucide-react";
 
 interface EmailDraftComposerProps {
@@ -230,9 +233,22 @@ export default function EmailDraftComposer({
     setError(null);
   };
 
+  const [showReasoning, setShowReasoning] = useState(false);
+
   const isSent = status === "sent";
   const isFailed = status === "failed";
   const canEdit = status === "draft" || status === "approved" || status === "failed";
+
+  // Triage category colors
+  const categoryColors: Record<string, string> = {
+    design: "bg-purple-50 text-purple-700 border-purple-200",
+    strategy: "bg-blue-50 text-blue-700 border-blue-200",
+    development: "bg-green-50 text-green-700 border-green-200",
+    pm: "bg-cyan-50 text-cyan-700 border-cyan-200",
+    general: "bg-gray-100 text-gray-600 border-gray-200",
+  };
+
+  const hasTriage = !!(initialDraft?.triage_category || initialDraft?.triage_reasoning);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden max-w-2xl w-full">
@@ -275,6 +291,58 @@ export default function EmailDraftComposer({
           <X size={16} />
         </button>
       </div>
+
+      {/* Triage info (for AI-triaged drafts) */}
+      {hasTriage && (
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 space-y-2">
+          {/* Category + confidence row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {initialDraft?.triage_category && (
+              <span
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex items-center gap-1 ${
+                  categoryColors[initialDraft.triage_category] || categoryColors.general
+                }`}
+              >
+                <Tag size={10} />
+                {initialDraft.triage_category}
+              </span>
+            )}
+
+            {initialDraft?.triage_confidence != null && (
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <Brain size={10} />
+                {Math.round(initialDraft.triage_confidence * 100)}% confidence
+              </span>
+            )}
+
+            {initialDraft?.linked_task_id && (
+              <span className="text-xs font-medium text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <LinkIcon size={10} />
+                Task linked
+              </span>
+            )}
+          </div>
+
+          {/* AI reasoning (collapsible) */}
+          {initialDraft?.triage_reasoning && (
+            <div>
+              <button
+                onClick={() => setShowReasoning(!showReasoning)}
+                className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 transition-colors"
+              >
+                <Brain size={12} />
+                AI Reasoning
+                {showReasoning ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+              {showReasoning && (
+                <p className="mt-1.5 text-xs text-gray-500 bg-white rounded-lg px-3 py-2 border border-gray-100 leading-relaxed">
+                  {initialDraft.triage_reasoning}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Form */}
       <div className="p-4 space-y-3">

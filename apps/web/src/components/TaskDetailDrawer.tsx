@@ -31,6 +31,7 @@ import {
   ChevronDown,
   Layers,
   Paperclip,
+  Mail,
 } from "lucide-react";
 import { getTaskFiles, deleteFile } from "@/lib/files";
 import FileUploadZone from "./FileUploadZone";
@@ -291,6 +292,13 @@ export default function TaskDetailDrawer({
                 <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
                   <Flag size={11} />
                   P{task.priority}
+                </span>
+              )}
+
+              {task.email_draft_id && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-cyan-50 text-cyan-600 border border-cyan-100">
+                  <Mail size={11} />
+                  From email
                 </span>
               )}
             </div>
