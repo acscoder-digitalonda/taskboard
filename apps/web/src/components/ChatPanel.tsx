@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { parseTaskInput, store } from "@/lib/store";
+import { useUsers, useProjects } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api-client";
 import { getUserById, getProjectById } from "@/lib/utils";
 import { Task, TaskStatus } from "@/types";
@@ -17,6 +18,8 @@ import {
   Bell,
   Phone,
   BellOff,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 
 type NotifyLevel = "in_app" | "whatsapp" | "none";
@@ -26,6 +29,7 @@ interface ChatMessage {
   role: "user" | "bot";
   text: string;
   taskPreview?: Partial<Task>;
+  isThinking?: boolean;
 }
 
 interface ChatPanelProps {
@@ -33,6 +37,8 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({ currentUserId }: ChatPanelProps) {
+  const users = useUsers();
+  const { projects } = useProjects();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -44,6 +50,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
   const [pendingTask, setPendingTask] = useState<Partial<Task> | null>(null);
   const [notifyLevel, setNotifyLevel] = useState<NotifyLevel>("in_app");
   const [isCreating, setIsCreating] = useState(false);
+  const [aiParsing, setAiParsing] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,34 +59,97 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function handleSend() {
-    if (!input.trim()) return;
+  async function handleSend() {
+    if (!input.trim() || aiParsing) return;
+    const text = input.trim();
+    setInput("");
 
     const userMsg: ChatMessage = {
       id: "msg-" + Date.now(),
       role: "user",
-      text: input.trim(),
+      text,
     };
 
-    const parsed = parseTaskInput(input.trim());
-
-    // Set defaults
-    if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
-    if (!parsed.status) parsed.status = "doing";
-    if (!parsed.priority) parsed.priority = 2;
-
-    const botMsg: ChatMessage = {
-      id: "bot-" + Date.now(),
+    const thinkingId = "thinking-" + Date.now();
+    const thinkingMsg: ChatMessage = {
+      id: thinkingId,
       role: "bot",
-      text: "Here's what I've got:",
-      taskPreview: parsed,
+      text: "Parsing your task...",
+      isThinking: true,
     };
 
-    setMessages((prev) => [...prev, userMsg, botMsg]);
-    setPendingTask(parsed);
-    // Default to whatsapp if assigning to someone else
-    setNotifyLevel(parsed.assignee_id !== currentUserId ? "whatsapp" : "in_app");
-    setInput("");
+    setMessages((prev) => [...prev, userMsg, thinkingMsg]);
+    setAiParsing(true);
+
+    try {
+      const res = await apiFetch("/api/chat/parse", {
+        method: "POST",
+        body: JSON.stringify({
+          message: text,
+          users: users.map((u) => ({ id: u.id, name: u.name })),
+          projects: projects.map((p) => ({ id: p.id, name: p.name })),
+        }),
+      });
+
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+
+      if (data.success && data.parsed) {
+        const parsed = data.parsed;
+        // Apply defaults
+        if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
+        if (!parsed.status) parsed.status = "doing";
+        if (!parsed.priority) parsed.priority = 3;
+
+        const confidence = parsed.confidence ?? 0;
+        const confidenceLabel =
+          confidence >= 0.8
+            ? "High confidence"
+            : confidence >= 0.5
+              ? "Medium confidence"
+              : "Low confidence";
+
+        const botMsg: ChatMessage = {
+          id: "bot-" + Date.now(),
+          role: "bot",
+          text: `Here's what I've got (${confidenceLabel}):`,
+          taskPreview: parsed,
+        };
+
+        setMessages((prev) =>
+          prev.filter((m) => m.id !== thinkingId).concat(botMsg)
+        );
+        setPendingTask(parsed);
+        setNotifyLevel(
+          parsed.assignee_id !== currentUserId ? "whatsapp" : "in_app"
+        );
+      } else {
+        throw new Error("Parse failed");
+      }
+    } catch {
+      // Fallback to regex parser
+      const parsed = parseTaskInput(text);
+      if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
+      if (!parsed.status) parsed.status = "doing";
+      if (!parsed.priority) parsed.priority = 2;
+
+      const botMsg: ChatMessage = {
+        id: "bot-" + Date.now(),
+        role: "bot",
+        text: "Here's what I've got:",
+        taskPreview: parsed,
+      };
+
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== thinkingId).concat(botMsg)
+      );
+      setPendingTask(parsed);
+      setNotifyLevel(
+        parsed.assignee_id !== currentUserId ? "whatsapp" : "in_app"
+      );
+    } finally {
+      setAiParsing(false);
+    }
   }
 
   async function handleCreate() {
@@ -127,7 +197,8 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
 
     let notifyLabel = "";
     if (notifyLevel === "whatsapp") notifyLabel = " 📱 WhatsApp notified.";
-    else if (notifyLevel === "in_app") notifyLabel = " 🔔 In-app notification sent.";
+    else if (notifyLevel === "in_app")
+      notifyLabel = " 🔔 In-app notification sent.";
 
     const confirmMsg: ChatMessage = {
       id: "confirm-" + Date.now(),
@@ -163,6 +234,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
         <div className="flex items-center gap-2">
           <MessageSquare size={18} />
           <span className="font-bold text-sm">Quick Task</span>
+          <Sparkles size={12} className="opacity-70" />
         </div>
         {isOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
       </button>
@@ -180,7 +252,14 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
               >
                 {msg.role === "bot" && (
                   <div className="w-7 h-7 rounded-full bg-cyan-100 flex items-center justify-center flex-shrink-0">
-                    <Bot size={14} className="text-cyan-600" />
+                    {msg.isThinking ? (
+                      <Loader2
+                        size={14}
+                        className="text-cyan-600 animate-spin"
+                      />
+                    ) : (
+                      <Bot size={14} className="text-cyan-600" />
+                    )}
                   </div>
                 )}
 
@@ -250,11 +329,31 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
                                 Notify assignee:
                               </p>
                               <div className="flex gap-1">
-                                {([
-                                  { level: "whatsapp" as NotifyLevel, icon: Phone, label: "WhatsApp", color: "bg-green-50 text-green-700 border-green-200" },
-                                  { level: "in_app" as NotifyLevel, icon: Bell, label: "In-app", color: "bg-cyan-50 text-cyan-700 border-cyan-200" },
-                                  { level: "none" as NotifyLevel, icon: BellOff, label: "None", color: "bg-gray-50 text-gray-500 border-gray-200" },
-                                ]).map(({ level, icon: Icon, label, color }) => (
+                                {(
+                                  [
+                                    {
+                                      level: "whatsapp" as NotifyLevel,
+                                      icon: Phone,
+                                      label: "WhatsApp",
+                                      color:
+                                        "bg-green-50 text-green-700 border-green-200",
+                                    },
+                                    {
+                                      level: "in_app" as NotifyLevel,
+                                      icon: Bell,
+                                      label: "In-app",
+                                      color:
+                                        "bg-cyan-50 text-cyan-700 border-cyan-200",
+                                    },
+                                    {
+                                      level: "none" as NotifyLevel,
+                                      icon: BellOff,
+                                      label: "None",
+                                      color:
+                                        "bg-gray-50 text-gray-500 border-gray-200",
+                                    },
+                                  ] as const
+                                ).map(({ level, icon: Icon, label, color }) => (
                                   <button
                                     key={level}
                                     onClick={() => setNotifyLevel(level)}
@@ -316,13 +415,18 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 placeholder="Type a task... e.g. &quot;Review deck, assign to An, due tomorrow&quot;"
                 className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm border border-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-300 transition-all"
+                disabled={aiParsing}
               />
               <button
                 onClick={handleSend}
-                disabled={!input.trim()}
+                disabled={!input.trim() || aiParsing}
                 className="px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <Send size={16} />
+                {aiParsing ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Send size={16} />
+                )}
               </button>
             </div>
           </div>

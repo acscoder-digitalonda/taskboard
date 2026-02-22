@@ -38,7 +38,7 @@ export default function ProjectManager({ onClose, currentUserId }: ProjectManage
     if (!newName.trim()) return;
     addProject(newName.trim(), newColor);
     setNewName("");
-    setNewColor(COLOR_OPTIONS[(projects.length + 1) % COLOR_OPTIONS.length]);
+    setNewColor(COLOR_OPTIONS[Math.floor(Math.random() * COLOR_OPTIONS.length)]);
   }
 
   function startEdit(id: string, name: string) {

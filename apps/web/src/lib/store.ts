@@ -178,6 +178,7 @@ async function initStore() {
     setupRealtime();
   } catch (err) {
     console.error("Failed to initialize store:", err);
+    storeErrorEmitter.emit("Failed to load data. Please refresh the page.");
   } finally {
     initializing = false;
   }

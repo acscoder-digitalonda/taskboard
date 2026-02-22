@@ -32,6 +32,7 @@ import {
   Loader2,
   Mail,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 interface ChannelChatProps {
@@ -130,6 +131,7 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
 
   const [uploading, setUploading] = useState(false);
   const [uploadingNames, setUploadingNames] = useState<string[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -160,6 +162,8 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
         }
       } catch (err) {
         console.error("File upload failed:", file.name, err);
+        setUploadError(`Failed to upload ${file.name}. Please try again.`);
+        setTimeout(() => setUploadError(null), 5000);
       }
       // Remove from uploading list as each completes
       setUploadingNames((prev) => prev.filter((n) => n !== file.name));
@@ -346,6 +350,20 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
             Uploading {uploadingNames[0]}
             {uploadingNames.length > 1 && ` +${uploadingNames.length - 1} more`}
           </p>
+        </div>
+      )}
+
+      {/* Upload error banner */}
+      {uploadError && (
+        <div className="px-4 py-2 bg-red-50 border-t border-red-100 flex items-center gap-2">
+          <AlertCircle size={14} className="text-red-500 flex-shrink-0" />
+          <p className="text-xs text-red-600 flex-1">{uploadError}</p>
+          <button
+            onClick={() => setUploadError(null)}
+            className="p-1 rounded hover:bg-red-100 text-red-400 transition-colors"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 

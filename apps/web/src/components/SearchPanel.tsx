@@ -24,6 +24,7 @@ export default function SearchPanel({ onSelectResult, onClose }: SearchPanelProp
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [limit, setLimit] = useState(30);
   const [activeFilter, setActiveFilter] = useState<
     "all" | "task" | "message" | "file" | "channel"
   >("all");
@@ -51,15 +52,16 @@ export default function SearchPanel({ onSelectResult, onClose }: SearchPanelProp
         activeFilter === "all"
           ? undefined
           : [activeFilter as "task" | "message" | "file" | "channel"];
-      const res = await searchEverything(q, { types, limit: 30 });
+      const res = await searchEverything(q, { types, limit });
       setResults(res);
       setLoading(false);
     },
-    [activeFilter]
+    [activeFilter, limit]
   );
 
   const handleChange = (value: string) => {
     setQuery(value);
+    setLimit(30);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(value), 300);
   };
@@ -68,6 +70,7 @@ export default function SearchPanel({ onSelectResult, onClose }: SearchPanelProp
     filter: "all" | "task" | "message" | "file" | "channel"
   ) => {
     setActiveFilter(filter);
+    setLimit(30);
     if (query.trim()) {
       doSearch(query);
     }
@@ -196,6 +199,18 @@ export default function SearchPanel({ onSelectResult, onClose }: SearchPanelProp
               </div>
             </button>
           ))}
+
+          {!loading && results.length >= limit && (
+            <button
+              onClick={() => {
+                setLimit((prev) => prev + 30);
+                doSearch(query);
+              }}
+              className="w-full py-3 text-xs font-medium text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50 transition-colors"
+            >
+              Load more results
+            </button>
+          )}
         </div>
       </div>
     </div>

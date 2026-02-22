@@ -245,7 +245,7 @@ export default function TaskDetailDrawer({
                 <textarea
                   value={titleValue}
                   onChange={(e) => setTitleValue(e.target.value)}
-                  className="flex-1 text-xl font-black text-gray-900 bg-gray-50 border border-gray-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-cyan-200 resize-none"
+                  className={`flex-1 text-xl font-black text-gray-900 bg-gray-50 border rounded-xl p-3 focus:outline-none focus:ring-2 resize-none ${!titleValue.trim() ? "border-red-300 focus:ring-red-200" : "border-gray-200 focus:ring-cyan-200"}`}
                   rows={2}
                   autoFocus
                 />
