@@ -3,6 +3,9 @@
     "name": "TaskBoard",
     "slug": "taskboard",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "scheme": "taskboard",
     "platforms": ["ios", "android"],
@@ -16,22 +19,56 @@
     },
     "ios": {
       "bundleIdentifier": "com.taskboard.app",
+      "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to unlock TaskBoard"
+        "NSFaceIDUsageDescription": "Use Face ID to unlock TaskBoard",
+        "NSPhotoLibraryUsageDescription": "Attach photos to tasks and messages",
+        "NSCameraUsageDescription": "Take photos to attach to tasks"
+      },
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.taskboard.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#00BCD4"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#00BCD4"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Attach photos to tasks and messages",
+          "cameraPermission": "Take photos to attach to tasks"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
+    "updates": {
+      "url": ""
+    },
+    "owner": ""
   }
 }

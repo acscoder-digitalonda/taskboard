@@ -1,23 +1,18 @@
-import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, typography } from '../../theme/tokens';
-// Use simple SVG-like icons via Text since lucide-react-native may not resolve
-// We'll use unicode/emoji as fallback icons
+"use client";
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    board: '▦',
-    list: '≡',
-    'my-day': '☀',
-    messages: '💬',
-    more: '⋯',
-  };
-  return (
-    <Text style={{ fontSize: 20, color: focused ? colors.primary[500] : colors.gray[400] }}>
-      {icons[name] || '•'}
-    </Text>
-  );
-}
+import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, typography } from '../../theme/tokens';
+
+type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TAB_ICONS: Record<string, { focused: IoniconsName; unfocused: IoniconsName }> = {
+  board: { focused: 'grid', unfocused: 'grid-outline' },
+  list: { focused: 'list', unfocused: 'list-outline' },
+  'my-day': { focused: 'sunny', unfocused: 'sunny-outline' },
+  messages: { focused: 'chatbubbles', unfocused: 'chatbubbles-outline' },
+  more: { focused: 'ellipsis-horizontal-circle', unfocused: 'ellipsis-horizontal-circle-outline' },
+};
 
 export default function TabLayout() {
   return (
@@ -48,35 +43,45 @@ export default function TabLayout() {
         name="board"
         options={{
           title: 'Board',
-          tabBarIcon: ({ focused }) => <TabIcon name="board" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={TAB_ICONS.board[focused ? 'focused' : 'unfocused']} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="list"
         options={{
           title: 'List',
-          tabBarIcon: ({ focused }) => <TabIcon name="list" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={TAB_ICONS.list[focused ? 'focused' : 'unfocused']} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="my-day"
         options={{
           title: 'My Day',
-          tabBarIcon: ({ focused }) => <TabIcon name="my-day" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={TAB_ICONS['my-day'][focused ? 'focused' : 'unfocused']} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="messages"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ focused }) => <TabIcon name="messages" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={TAB_ICONS.messages[focused ? 'focused' : 'unfocused']} size={22} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="more"
         options={{
           title: 'More',
-          tabBarIcon: ({ focused }) => <TabIcon name="more" focused={focused} />,
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={TAB_ICONS.more[focused ? 'focused' : 'unfocused']} size={22} color={color} />
+          ),
         }}
       />
     </Tabs>
