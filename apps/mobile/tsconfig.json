@@ -3,9 +3,16 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@taskboard/shared": ["../../packages/shared/src"],
-      "@taskboard/shared/*": ["../../packages/shared/src/*"]
+      "@taskboard/shared": [
+        "../../packages/shared/src"
+      ],
+      "@taskboard/shared/*": [
+        "../../packages/shared/src/*"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ]
 }
