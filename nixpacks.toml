@@ -1,0 +1,11 @@
+# Nixpacks config for Coolify deployment
+# Build from monorepo root, serve Next.js from apps/web
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"
