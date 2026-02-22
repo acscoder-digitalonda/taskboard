@@ -152,9 +152,8 @@ export default function EmailDraftComposer({
       if (!currentDraftId || dirty) {
         // Create or update the draft
         if (currentDraftId) {
-          await fetch(`/api/email/drafts/${currentDraftId}`, {
+          const patchRes = await apiFetch(`/api/email/drafts/${currentDraftId}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to_email: toEmail,
               to_name: toName || null,
@@ -163,10 +162,13 @@ export default function EmailDraftComposer({
               edited_by: currentUser?.id,
             }),
           });
+          if (!patchRes.ok) {
+            const patchData = await patchRes.json();
+            throw new Error(patchData.error || "Failed to save draft before sending");
+          }
         } else {
-          const createRes = await fetch("/api/email/drafts", {
+          const createRes = await apiFetch("/api/email/drafts", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to_email: toEmail,
               to_name: toName || null,

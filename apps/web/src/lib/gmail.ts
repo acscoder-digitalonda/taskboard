@@ -27,7 +27,14 @@ function getGmailClient() {
     );
   }
 
-  const credentials = JSON.parse(raw);
+  let credentials;
+  try {
+    credentials = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "GOOGLE_SERVICE_ACCOUNT_JSON contains invalid JSON. Check the env var value."
+    );
+  }
 
   const auth = new google.auth.JWT({
     email: credentials.client_email,
@@ -92,7 +99,7 @@ function buildRawEmail(options: {
       `--${boundary}--`,
     ].join("\r\n");
   } else {
-    headers.push(`Content-Type: text/plain; charset="UTF-8"`);
+    headers.push('Content-Type: text/plain; charset="UTF-8"');
     body = bodyText;
   }
 

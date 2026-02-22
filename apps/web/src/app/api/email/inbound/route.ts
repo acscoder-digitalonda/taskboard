@@ -234,38 +234,41 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Auto-create draft reply ───────────────────────────
-    // Creates a placeholder draft that Katie can review and edit
+    // Creates a placeholder draft that team can review and edit
+    // Only create if we have a channel to link it to (avoids orphaned drafts)
     let draftId: string | null = null;
 
-    const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
-    const replyBody = [
-      `Hi ${senderName.split(" ")[0]},`,
-      "",
-      "Thank you for your email. I'll review this and get back to you shortly.",
-      "",
-      "Best regards,",
-      TEAM_NAME,
-    ].join("\n");
+    if (channelId) {
+      const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
+      const replyBody = [
+        `Hi ${senderName.split(" ")[0]},`,
+        "",
+        "Thank you for your email. I'll review this and get back to you shortly.",
+        "",
+        "Best regards,",
+        TEAM_NAME,
+      ].join("\n");
 
-    const { data: draftData } = await supabase
-      .from("email_drafts")
-      .insert({
-        channel_id: channelId,
-        project_id: projectId,
-        to_email: senderEmail,
-        to_name: senderName !== senderEmail ? senderName : null,
-        subject: replySubject,
-        body_text: replyBody,
-        in_reply_to_message_id: messageId,
-        gmail_thread_id: gmailThreadId,
-        gmail_message_id: gmailMessageId,
-        status: "draft",
-        generated_by: "ai",
-      })
-      .select("id")
-      .single();
+      const { data: draftData } = await supabase
+        .from("email_drafts")
+        .insert({
+          channel_id: channelId,
+          project_id: projectId,
+          to_email: senderEmail,
+          to_name: senderName !== senderEmail ? senderName : null,
+          subject: replySubject,
+          body_text: replyBody,
+          in_reply_to_message_id: messageId,
+          gmail_thread_id: gmailThreadId,
+          gmail_message_id: gmailMessageId,
+          status: "draft",
+          generated_by: "ai",
+        })
+        .select("id")
+        .single();
 
-    draftId = draftData?.id || null;
+      draftId = draftData?.id || null;
+    }
 
     // ── Log to agent_activity ─────────────────────────────
     await supabase.from("agent_activity").insert({

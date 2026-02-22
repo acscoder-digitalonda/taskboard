@@ -52,6 +52,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to_email)) {
+      return NextResponse.json(
+        { error: "Invalid email format for to_email" },
+        { status: 400 }
+      );
+    }
+
     const { data, error } = await supabase
       .from("email_drafts")
       .insert({
