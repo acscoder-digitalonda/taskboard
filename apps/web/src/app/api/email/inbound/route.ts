@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase, verifyWebhookSecret } from "@/lib/api-auth";
+import { triageEmail, TriageResult } from "@/app/api/email/triage/route";
+import { appendToDecisionLog } from "@/lib/context";
+import {
+  uploadFileFromUrl,
+  linkFilesToTask,
+  formatFileSize,
+} from "@/lib/files-server";
 
 // L3: Team name from env for auto-reply signatures
 const TEAM_NAME = process.env.NEXT_PUBLIC_TEAM_NAME || "Our Team";
+
+interface EmailAttachment {
+  filename: string;
+  content_type: string;
+  size: number;
+  url: string;
+}
 
 /**
  * POST /api/email/inbound
@@ -10,21 +24,17 @@ const TEAM_NAME = process.env.NEXT_PUBLIC_TEAM_NAME || "Our Team";
  * Webhook for inbound emails (recipient configured via GMAIL_SEND_AS).
  * Compatible with SendGrid Inbound Parse, Mailgun, or Postmark.
  *
- * Stores the email as a message in the appropriate project channel,
- * logs it for the Comms Hub, and auto-creates a draft reply.
+ * Flow:
+ * 1. Parse email fields
+ * 2. Match to project (client_emails → task client → domain)
+ * 3. Find or create email channel
+ * 4. Store email as channel message
+ * 5. Process attachments → upload to Storage + link to channel/project
+ * 6. AI Triage → classify, route, create task, write context-aware draft
+ * 7. Update project decision_log with triage result
+ * 8. Notify PM (Katie) + assignee
  *
- * Body (JSON):
- *   from: string          — sender email
- *   to: string            — recipient (configured via GMAIL_SEND_AS)
- *   subject: string       — email subject
- *   text: string          — plain text body
- *   html?: string         — HTML body (optional)
- *   project_id?: string   — link to project (auto-detect from subject/sender)
- *   gmail_thread_id?: string — Gmail thread ID for threading
- *   gmail_message_id?: string — Gmail message ID for In-Reply-To
- *   attachments?: Array<{ filename: string, content_type: string, size: number, url: string }>
- *
- * Also supports multipart/form-data from SendGrid Inbound Parse.
+ * Falls back to generic draft if triage fails.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -45,6 +55,7 @@ export async function POST(req: NextRequest) {
     let projectId: string | null = null;
     let gmailThreadId: string | null = null;
     let gmailMessageId: string | null = null;
+    let attachments: EmailAttachment[] = [];
 
     const contentType = req.headers.get("content-type") || "";
 
@@ -58,6 +69,7 @@ export async function POST(req: NextRequest) {
       projectId = body.project_id || null;
       gmailThreadId = body.gmail_thread_id || null;
       gmailMessageId = body.gmail_message_id || null;
+      attachments = body.attachments || [];
     } else if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
       from = (formData.get("from") as string) || "";
@@ -65,12 +77,23 @@ export async function POST(req: NextRequest) {
       subject = (formData.get("subject") as string) || "(no subject)";
       textBody = (formData.get("text") as string) || "";
       htmlBody = (formData.get("html") as string) || null;
+      // SendGrid sends attachments as attachment-info JSON
+      const attachInfo = formData.get("attachment-info") as string;
+      if (attachInfo) {
+        try {
+          const parsed = JSON.parse(attachInfo);
+          attachments = Object.values(parsed) as EmailAttachment[];
+        } catch {
+          // Ignore parse errors for attachment info
+        }
+      }
     } else {
       const body = await req.json().catch(() => ({}));
       from = body.from || "";
       to = body.to || "";
       subject = body.subject || "(no subject)";
       textBody = body.text || "";
+      attachments = body.attachments || [];
     }
 
     if (!from) {
@@ -132,6 +155,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Get project name for triage
+    let projectName: string | null = null;
+    if (projectId) {
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("name")
+        .eq("id", projectId)
+        .single();
+      projectName = proj?.name || null;
+    }
+
     // ── Find or create email channel ────────────────────────
     let channelId: string | null = null;
 
@@ -150,14 +184,8 @@ export async function POST(req: NextRequest) {
         channelId = existingChannel.id;
       } else {
         // Auto-create an email channel for the project
-        const { data: projectData } = await supabase
-          .from("projects")
-          .select("name")
-          .eq("id", projectId)
-          .single();
-
-        const channelName = projectData
-          ? `${projectData.name} – Email`
+        const channelName = projectName
+          ? `${projectName} – Email`
           : "Email Thread";
 
         const { data: newChannel } = await supabase
@@ -194,11 +222,16 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Store email as channel message ─────────────────────
+    const attachmentSummary = attachments.length
+      ? `\n\n${attachments.map((a) => `📎 ${a.filename} (${formatFileSize(a.size)})`).join("\n")}`
+      : "";
+
     const emailContent = [
       `📧 **Email from ${senderName}**`,
       `**Subject:** ${subject}`,
       "",
       textBody.slice(0, 2000),
+      attachmentSummary,
     ].join("\n");
 
     let messageId: string | null = null;
@@ -220,6 +253,7 @@ export async function POST(req: NextRequest) {
             to,
             gmail_thread_id: gmailThreadId,
             gmail_message_id: gmailMessageId,
+            attachment_count: attachments.length,
           },
         })
         .select("id")
@@ -233,12 +267,164 @@ export async function POST(req: NextRequest) {
         .eq("id", channelId);
     }
 
-    // ── Auto-create draft reply ───────────────────────────
-    // Creates a placeholder draft that team can review and edit
-    // Only create if we have a channel to link it to (avoids orphaned drafts)
+    // ── Process email attachments ──────────────────────────
+    const uploadedFileIds: string[] = [];
+    const attachmentNames: string[] = [];
+
+    for (const attachment of attachments) {
+      if (!attachment.url) continue;
+
+      attachmentNames.push(attachment.filename);
+
+      const uploaded = await uploadFileFromUrl(attachment.url, {
+        fileName: attachment.filename,
+        mimeType: attachment.content_type,
+        sizeBytes: attachment.size,
+        projectId: projectId || undefined,
+        channelId: channelId || undefined,
+        messageId: messageId || undefined,
+      });
+
+      if (uploaded) {
+        uploadedFileIds.push(uploaded.id);
+      }
+    }
+
+    // ── AI Triage (if we have a project and the API key is configured) ──
+    let triageResult: TriageResult | null = null;
+    let taskId: string | null = null;
     let draftId: string | null = null;
 
-    if (channelId) {
+    const triageEnabled = !!process.env.TASKBOARD_ANTHROPIC_KEY;
+
+    if (triageEnabled && channelId) {
+      try {
+        triageResult = await triageEmail({
+          fromEmail: senderEmail,
+          fromName: senderName,
+          subject,
+          body: textBody,
+          projectId,
+          projectName,
+          attachmentNames: attachmentNames.length ? attachmentNames : undefined,
+        });
+      } catch (triageError) {
+        console.error("Triage failed, falling back to generic draft:", triageError);
+        // triageResult stays null → falls through to generic draft below
+      }
+    }
+
+    if (triageResult && channelId) {
+      // ── Create context-aware draft reply ─────────────────
+      const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
+
+      const { data: draftData } = await supabase
+        .from("email_drafts")
+        .insert({
+          channel_id: channelId,
+          project_id: projectId,
+          to_email: senderEmail,
+          to_name: senderName !== senderEmail ? senderName : null,
+          subject: replySubject,
+          body_text: triageResult.draft_reply,
+          in_reply_to_message_id: messageId,
+          gmail_thread_id: gmailThreadId,
+          gmail_message_id: gmailMessageId,
+          status: "draft",
+          generated_by: "ai",
+          triage_category: triageResult.category,
+          triage_reasoning: triageResult.reasoning,
+          triage_confidence: triageResult.confidence,
+        })
+        .select("id")
+        .single();
+
+      draftId = draftData?.id || null;
+
+      // ── Create task assigned to correct team member ──────
+      // Find a user with the matching role
+      const { data: assignee } = await supabase
+        .from("users")
+        .select("id, name")
+        .eq("role", triageResult.assignee_role)
+        .limit(1)
+        .single();
+
+      // Fall back to PM if no user with that role
+      const { data: pmUser } = !assignee
+        ? await supabase
+            .from("users")
+            .select("id, name")
+            .eq("role", "pm")
+            .limit(1)
+            .single()
+        : { data: null };
+
+      const taskAssignee = assignee || pmUser;
+
+      if (taskAssignee) {
+        const { data: taskData } = await supabase
+          .from("tasks")
+          .insert({
+            title: triageResult.task_title,
+            client: senderEmail,
+            assignee_id: taskAssignee.id,
+            project_id: projectId,
+            status: "backlog",
+            priority: triageResult.task_priority || 3,
+            created_by_id: taskAssignee.id,
+            created_via: "email",
+            drive_links: [],
+            notes: [],
+            sort_order: 0,
+            email_draft_id: draftId,
+            source_email_id: gmailMessageId || messageId,
+          })
+          .select("id")
+          .single();
+
+        taskId = taskData?.id || null;
+
+        // Insert task sections from triage
+        if (taskId && triageResult.task_sections?.length) {
+          const sectionInserts = triageResult.task_sections.map((s, i) => ({
+            task_id: taskId!,
+            heading: s.heading,
+            content: s.content,
+            sort_order: i,
+          }));
+          await supabase.from("task_sections").insert(sectionInserts);
+        }
+
+        // Link draft ↔ task
+        if (taskId && draftId) {
+          await supabase
+            .from("email_drafts")
+            .update({ linked_task_id: taskId })
+            .eq("id", draftId);
+        }
+
+        // Link email attachments to the new task
+        if (taskId && uploadedFileIds.length) {
+          await linkFilesToTask(uploadedFileIds, taskId);
+        }
+      }
+
+      // ── Update project decision log ──────────────────────
+      if (projectId) {
+        const attachmentNote = attachmentNames.length
+          ? ` — ${attachmentNames.length} attachment(s): ${attachmentNames.join(", ")}`
+          : "";
+        const assigneeName = taskAssignee?.name || triageResult.assignee_role;
+
+        await appendToDecisionLog(
+          supabase,
+          projectId,
+          `Email from ${senderName} re: "${subject}"${attachmentNote} — classified as ${triageResult.category}, assigned to ${assigneeName} (confidence: ${triageResult.confidence})`
+        );
+      }
+    } else if (channelId) {
+      // ── Fallback: generic draft reply (no triage) ────────
       const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
       const replyBody = [
         `Hi ${senderName.split(" ")[0]},`,
@@ -273,8 +459,10 @@ export async function POST(req: NextRequest) {
     // ── Log to agent_activity ─────────────────────────────
     await supabase.from("agent_activity").insert({
       agent_name: "email-inbound",
-      action: "email_ingested",
-      description: `Email from ${senderName}: "${subject}"`,
+      action: triageResult ? "email_triaged" : "email_ingested",
+      description: triageResult
+        ? `Email from ${senderName}: "${subject}" → ${triageResult.category} (${triageResult.confidence})`
+        : `Email from ${senderName}: "${subject}"`,
       source_email: senderEmail,
       project_id: projectId,
       channel_id: channelId,
@@ -287,29 +475,78 @@ export async function POST(req: NextRequest) {
         gmail_thread_id: gmailThreadId,
         gmail_message_id: gmailMessageId,
         draft_id: draftId,
-        auto_draft_created: !!draftId,
+        task_id: taskId,
+        triage_category: triageResult?.category || null,
+        triage_confidence: triageResult?.confidence || null,
+        attachment_count: attachments.length,
+        uploaded_file_ids: uploadedFileIds,
       },
     });
 
-    // ── Notify team ───────────────────────────────────────
-    const { data: teamUsers } = await supabase
-      .from("users")
-      .select("id")
-      .limit(20);
+    // ── Notify PM (email_triage) + assignee (task_assigned) ──
+    if (triageResult && taskId) {
+      // Notify PM(s) about the triage
+      const { data: pmUsers } = await supabase
+        .from("users")
+        .select("id")
+        .eq("role", "pm");
 
-    if (teamUsers) {
-      const notifications = teamUsers.map((u) => ({
-        user_id: u.id,
-        type: "email_ingested" as const,
-        title: `Email from ${senderName}`,
-        body: subject,
-        link: channelId ? `/messages/${channelId}` : null,
-        channel: "in_app" as const,
-        reference_id: channelId,
-        reference_type: channelId ? "channel" : null,
-      }));
+      if (pmUsers?.length) {
+        await supabase.from("notifications").insert(
+          pmUsers.map((u) => ({
+            user_id: u.id,
+            type: "email_triage" as const,
+            title: `New email triaged: ${triageResult!.category}`,
+            body: `${senderName}: "${subject}" — review draft reply`,
+            link: channelId ? `/messages/${channelId}` : null,
+            channel: "in_app" as const,
+            reference_id: draftId,
+            reference_type: "email_draft",
+          }))
+        );
+      }
 
-      await supabase.from("notifications").insert(notifications);
+      // Notify the assignee about the task
+      const { data: assignee } = await supabase
+        .from("users")
+        .select("id")
+        .eq("role", triageResult.assignee_role)
+        .limit(1)
+        .single();
+
+      if (assignee) {
+        await supabase.from("notifications").insert({
+          user_id: assignee.id,
+          type: "task_assigned" as const,
+          title: `New task: ${triageResult.task_title}`,
+          body: `From email: ${senderName} — ${subject}`,
+          link: `/tasks/${taskId}`,
+          channel: "in_app" as const,
+          reference_id: taskId,
+          reference_type: "task",
+        });
+      }
+    } else {
+      // Fallback: notify all team members (old behavior)
+      const { data: teamUsers } = await supabase
+        .from("users")
+        .select("id")
+        .limit(20);
+
+      if (teamUsers) {
+        await supabase.from("notifications").insert(
+          teamUsers.map((u) => ({
+            user_id: u.id,
+            type: "email_ingested" as const,
+            title: `Email from ${senderName}`,
+            body: subject,
+            link: channelId ? `/messages/${channelId}` : null,
+            channel: "in_app" as const,
+            reference_id: channelId,
+            reference_type: channelId ? "channel" : null,
+          }))
+        );
+      }
     }
 
     return NextResponse.json({
@@ -318,6 +555,15 @@ export async function POST(req: NextRequest) {
       project_id: projectId,
       message_id: messageId,
       draft_id: draftId,
+      task_id: taskId,
+      triage: triageResult
+        ? {
+            category: triageResult.category,
+            assignee_role: triageResult.assignee_role,
+            confidence: triageResult.confidence,
+          }
+        : null,
+      attachments_uploaded: uploadedFileIds.length,
     });
   } catch (error) {
     console.error("Email inbound error:", error);

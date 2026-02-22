@@ -51,6 +51,24 @@ vi.mock("@/lib/rate-limit", () => ({
   rateLimit: () => ({ check: () => null }),
 }));
 
+// ── Mock triage (Anthropic SDK can't init in test env) ───────
+vi.mock("@/app/api/email/triage/route", () => ({
+  triageEmail: vi.fn().mockResolvedValue(null),
+  TriageResult: {},
+}));
+
+// ── Mock context + files-server ──────────────────────────────
+vi.mock("@/lib/context", () => ({
+  getProjectContext: vi.fn().mockResolvedValue(""),
+  appendToDecisionLog: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/files-server", () => ({
+  uploadFileFromUrl: vi.fn().mockResolvedValue(null),
+  linkFilesToTask: vi.fn().mockResolvedValue(undefined),
+  formatFileSize: vi.fn().mockReturnValue("0 B"),
+}));
+
 // ── Helpers ────────────────────────────────────────────────────
 function makeRequest(
   body: Record<string, unknown>,
