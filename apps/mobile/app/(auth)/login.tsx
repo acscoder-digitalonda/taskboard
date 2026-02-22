@@ -1,24 +1,82 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { colors, typography, spacing, borderRadius } from '../../theme/tokens';
 import { supabase } from '../../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
 
-// For Google OAuth web flow
+// Complete any pending auth session on app resume
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
   async function handleGoogleLogin() {
-    const redirectUrl = AuthSession.makeRedirectUri({ scheme: 'taskboard' });
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl,
-        skipBrowserRedirect: true,
-      },
-    });
-    if (data?.url) {
-      await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    try {
+      setLoading(true);
+      const redirectUrl = AuthSession.makeRedirectUri({ scheme: 'taskboard' });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) {
+        Alert.alert('Login Error', error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!data?.url) {
+        Alert.alert('Login Error', 'Could not get login URL. Check your Supabase Google OAuth config.');
+        setLoading(false);
+        return;
+      }
+
+      // Open the browser for OAuth
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+      if (result.type === 'success' && result.url) {
+        // Extract tokens from the callback URL
+        const url = new URL(result.url);
+
+        // Supabase returns tokens in the URL fragment (hash)
+        const hashParams = new URLSearchParams(url.hash.replace('#', ''));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (sessionError) {
+            Alert.alert('Auth Error', sessionError.message);
+          }
+          // AuthProvider will detect the session change and redirect
+        } else {
+          // Try query params as fallback (some flows use code exchange)
+          const code = url.searchParams.get('code');
+          if (code) {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            if (exchangeError) {
+              Alert.alert('Auth Error', exchangeError.message);
+            }
+          }
+        }
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        // User cancelled — do nothing
+      }
+    } catch (e: any) {
+      Alert.alert('Login Error', e?.message || 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -33,8 +91,16 @@ export default function LoginScreen() {
       </View>
 
       <View style={styles.buttonContainer}>
-        <Pressable style={styles.googleButton} onPress={handleGoogleLogin}>
-          <Text style={styles.googleButtonText}>Sign in with Google</Text>
+        <Pressable
+          style={({ pressed }) => [styles.googleButton, pressed && styles.googleButtonPressed]}
+          onPress={handleGoogleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.googleButtonText}>Sign in with Google</Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -88,6 +154,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  googleButtonPressed: {
+    backgroundColor: colors.primary[600],
   },
   googleButtonText: {
     color: colors.white,

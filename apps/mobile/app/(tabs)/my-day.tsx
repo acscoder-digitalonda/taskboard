@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, typography, spacing, borderRadius } from '../../theme/tokens';
 import TaskCard from '../../components/TaskCard';
@@ -16,14 +16,22 @@ export default function MyDayScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const [taskRes, userRes, projRes] = await Promise.all([
-      supabase.from('tasks').select('*').order('priority', { ascending: true }),
-      supabase.from('users').select('id, name, initials, color'),
-      supabase.from('projects').select('id, name, color'),
-    ]);
-    setTasks(taskRes.data || []);
-    setUsers(userRes.data || []);
-    setProjects(projRes.data || []);
+    try {
+      const [taskRes, userRes, projRes] = await Promise.all([
+        supabase.from('tasks').select('*').order('priority', { ascending: true }),
+        supabase.from('users').select('id, name, initials, color'),
+        supabase.from('projects').select('id, name, color'),
+      ]);
+      if (taskRes.error) console.error('Failed to fetch tasks:', taskRes.error.message);
+      if (userRes.error) console.error('Failed to fetch users:', userRes.error.message);
+      if (projRes.error) console.error('Failed to fetch projects:', projRes.error.message);
+      setTasks(taskRes.data || []);
+      setUsers(userRes.data || []);
+      setProjects(projRes.data || []);
+    } catch (err: any) {
+      console.error('My Day fetch error:', err);
+      Alert.alert('Connection Error', 'Could not load your tasks. Pull down to retry.');
+    }
     setRefreshing(false);
   }, []);
 

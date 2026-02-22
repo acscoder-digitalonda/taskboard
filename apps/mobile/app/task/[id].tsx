@@ -20,25 +20,43 @@ export default function TaskDetailScreen() {
 
   useEffect(() => {
     async function load() {
-      const [taskRes, userRes, projRes] = await Promise.all([
-        supabase.from('tasks').select('*').eq('id', id).single(),
-        supabase.from('users').select('*'),
-        supabase.from('projects').select('*'),
-      ]);
-      if (taskRes.data) {
-        setTask(taskRes.data);
-        setTitleDraft(taskRes.data.title);
+      try {
+        const [taskRes, userRes, projRes] = await Promise.all([
+          supabase.from('tasks').select('*').eq('id', id).single(),
+          supabase.from('users').select('*'),
+          supabase.from('projects').select('*'),
+        ]);
+        if (taskRes.error) {
+          console.error('Failed to fetch task:', taskRes.error.message);
+          Alert.alert('Error', 'Could not load task details.');
+        } else if (taskRes.data) {
+          setTask(taskRes.data);
+          setTitleDraft(taskRes.data.title);
+        }
+        if (userRes.error) console.error('Failed to fetch users:', userRes.error.message);
+        if (projRes.error) console.error('Failed to fetch projects:', projRes.error.message);
+        setUsers(userRes.data || []);
+        setProjects(projRes.data || []);
+      } catch (err: any) {
+        console.error('Task detail fetch error:', err);
+        Alert.alert('Error', 'Could not load task. Please try again.');
       }
-      setUsers(userRes.data || []);
-      setProjects(projRes.data || []);
       setLoading(false);
     }
     load();
   }, [id]);
 
   async function updateField(field: string, value: any) {
-    const { error } = await supabase.from('tasks').update({ [field]: value }).eq('id', id);
-    if (!error) setTask((prev: any) => ({ ...prev, [field]: value }));
+    try {
+      const { error } = await supabase.from('tasks').update({ [field]: value }).eq('id', id);
+      if (error) {
+        Alert.alert('Update Error', `Could not update ${field}: ${error.message}`);
+      } else {
+        setTask((prev: any) => ({ ...prev, [field]: value }));
+      }
+    } catch (err: any) {
+      Alert.alert('Update Error', err?.message || 'Failed to update task.');
+    }
   }
 
   async function handleDelete() {
@@ -48,8 +66,16 @@ export default function TaskDetailScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          await supabase.from('tasks').delete().eq('id', id);
-          router.back();
+          try {
+            const { error } = await supabase.from('tasks').delete().eq('id', id);
+            if (error) {
+              Alert.alert('Delete Error', error.message);
+              return;
+            }
+            router.back();
+          } catch (err: any) {
+            Alert.alert('Delete Error', err?.message || 'Failed to delete task.');
+          }
         },
       },
     ]);

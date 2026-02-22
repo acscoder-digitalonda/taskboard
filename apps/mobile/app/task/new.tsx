@@ -20,12 +20,18 @@ export default function NewTaskScreen() {
 
   useEffect(() => {
     async function load() {
-      const [userRes, projRes] = await Promise.all([
-        supabase.from('users').select('*'),
-        supabase.from('projects').select('*'),
-      ]);
-      setUsers(userRes.data || []);
-      setProjects(projRes.data || []);
+      try {
+        const [userRes, projRes] = await Promise.all([
+          supabase.from('users').select('*'),
+          supabase.from('projects').select('*'),
+        ]);
+        if (userRes.error) console.error('Failed to fetch users:', userRes.error.message);
+        if (projRes.error) console.error('Failed to fetch projects:', projRes.error.message);
+        setUsers(userRes.data || []);
+        setProjects(projRes.data || []);
+      } catch (err: any) {
+        console.error('New task form fetch error:', err);
+      }
       if (currentUser) setAssigneeId(currentUser.id);
     }
     load();
@@ -37,20 +43,24 @@ export default function NewTaskScreen() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from('tasks').insert({
-      title: title.trim(),
-      status,
-      assignee_id: assigneeId || currentUser?.id,
-      project_id: projectId,
-      priority: 3,
-      created_via: 'mobile',
-    });
-    setSaving(false);
-    if (error) {
-      Alert.alert('Error', 'Failed to create task. Please try again.');
-    } else {
-      router.back();
+    try {
+      const { error } = await supabase.from('tasks').insert({
+        title: title.trim(),
+        status,
+        assignee_id: assigneeId || currentUser?.id,
+        project_id: projectId,
+        priority: 3,
+        created_via: 'mobile',
+      });
+      if (error) {
+        Alert.alert('Create Error', error.message);
+      } else {
+        router.back();
+      }
+    } catch (err: any) {
+      Alert.alert('Create Error', err?.message || 'Failed to create task.');
     }
+    setSaving(false);
   }
 
   const statuses = ['backlog', 'doing', 'waiting', 'done'];

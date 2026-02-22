@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, FlatList, StyleSheet, Pressable, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, typography, spacing, borderRadius } from '../../theme/tokens';
 import TaskCard from '../../components/TaskCard';
@@ -48,14 +48,22 @@ export default function BoardScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const [taskRes, userRes, projRes] = await Promise.all([
-      supabase.from('tasks').select('*').order('sort_order', { ascending: true }),
-      supabase.from('users').select('id, name, initials, color'),
-      supabase.from('projects').select('id, name, color'),
-    ]);
-    setTasks(taskRes.data || []);
-    setUsers(userRes.data || []);
-    setProjects(projRes.data || []);
+    try {
+      const [taskRes, userRes, projRes] = await Promise.all([
+        supabase.from('tasks').select('*').order('sort_order', { ascending: true }),
+        supabase.from('users').select('id, name, initials, color'),
+        supabase.from('projects').select('id, name, color'),
+      ]);
+      if (taskRes.error) console.error('Failed to fetch tasks:', taskRes.error.message);
+      if (userRes.error) console.error('Failed to fetch users:', userRes.error.message);
+      if (projRes.error) console.error('Failed to fetch projects:', projRes.error.message);
+      setTasks(taskRes.data || []);
+      setUsers(userRes.data || []);
+      setProjects(projRes.data || []);
+    } catch (err: any) {
+      console.error('Board fetch error:', err);
+      Alert.alert('Connection Error', 'Could not load board data. Pull down to retry.');
+    }
     setLoading(false);
   }, []);
 
@@ -150,35 +158,34 @@ export default function BoardScreen() {
                     <Text style={styles.countText}>{columnTasks.length}</Text>
                   </View>
                 </View>
-                <FlatList
-                  data={columnTasks}
-                  keyExtractor={item => item.id}
-                  renderItem={({ item }) => {
-                    const user = getUser(item.assignee_id);
-                    const project = getProject(item.project_id);
-                    return (
-                      <TaskCard
-                        title={item.title}
-                        status={item.status}
-                        assigneeName={user?.name}
-                        assigneeColor={user?.color}
-                        assigneeInitials={user?.initials}
-                        projectName={project?.name}
-                        projectColor={project?.color}
-                        dueLabel={computeDueLabel(item.due_at)}
-                        isOverdue={computeIsOverdue(item.due_at, item.status)}
-                        onPress={() => router.push(`/task/${item.id}`)}
-                      />
-                    );
-                  }}
-                  ListEmptyComponent={
+                {/* Use map instead of FlatList to avoid VirtualizedList nesting warning */}
+                <View style={styles.columnContent}>
+                  {columnTasks.length === 0 ? (
                     <View style={styles.emptyColumn}>
                       <Text style={styles.emptyText}>No tasks</Text>
                     </View>
-                  }
-                  contentContainerStyle={styles.columnContent}
-                  showsVerticalScrollIndicator={false}
-                />
+                  ) : (
+                    columnTasks.map(item => {
+                      const user = getUser(item.assignee_id);
+                      const project = getProject(item.project_id);
+                      return (
+                        <TaskCard
+                          key={item.id}
+                          title={item.title}
+                          status={item.status}
+                          assigneeName={user?.name}
+                          assigneeColor={user?.color}
+                          assigneeInitials={user?.initials}
+                          projectName={project?.name}
+                          projectColor={project?.color}
+                          dueLabel={computeDueLabel(item.due_at)}
+                          isOverdue={computeIsOverdue(item.due_at, item.status)}
+                          onPress={() => router.push(`/task/${item.id}`)}
+                        />
+                      );
+                    })
+                  )}
+                </View>
               </View>
             );
           })}

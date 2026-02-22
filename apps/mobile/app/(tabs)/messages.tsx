@@ -1,4 +1,4 @@
-import { View, Text, FlatList, Pressable, StyleSheet, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { colors, typography, spacing, borderRadius } from '../../theme/tokens';
 import UserAvatar from '../../components/UserAvatar';
@@ -27,32 +27,50 @@ export default function MessagesScreen() {
 
   const fetchChannels = useCallback(async () => {
     if (!currentUser) return;
-    const { data: memberData } = await supabase
-      .from('channel_members')
-      .select('channel_id')
-      .eq('user_id', currentUser.id);
+    try {
+      const { data: memberData, error: memberError } = await supabase
+        .from('channel_members')
+        .select('channel_id')
+        .eq('user_id', currentUser.id);
 
-    if (!memberData) { setLoading(false); return; }
+      if (memberError) {
+        console.error('Failed to fetch channel memberships:', memberError.message);
+        setLoading(false);
+        return;
+      }
 
-    const channelIds = memberData.map(m => m.channel_id);
-    const { data: channelData } = await supabase
-      .from('channels')
-      .select('*')
-      .in('id', channelIds)
-      .eq('is_archived', false)
-      .order('updated_at', { ascending: false });
+      if (!memberData || memberData.length === 0) { setLoading(false); return; }
 
-    setChannels(channelData || []);
+      const channelIds = memberData.map(m => m.channel_id);
+      const { data: channelData, error: channelError } = await supabase
+        .from('channels')
+        .select('*')
+        .in('id', channelIds)
+        .eq('is_archived', false)
+        .order('updated_at', { ascending: false });
+
+      if (channelError) console.error('Failed to fetch channels:', channelError.message);
+      setChannels(channelData || []);
+    } catch (err: any) {
+      console.error('Messages fetch error:', err);
+      Alert.alert('Connection Error', 'Could not load conversations.');
+    }
     setLoading(false);
   }, [currentUser]);
 
   const fetchMessages = useCallback(async (channelId: string) => {
-    const [msgRes, userRes] = await Promise.all([
-      supabase.from('messages').select('*').eq('channel_id', channelId).is('deleted_at', null).order('created_at', { ascending: false }).limit(50),
-      supabase.from('users').select('id, name, initials, color, avatar_url'),
-    ]);
-    setMessages(msgRes.data || []);
-    setUsers(userRes.data || []);
+    try {
+      const [msgRes, userRes] = await Promise.all([
+        supabase.from('messages').select('*').eq('channel_id', channelId).is('deleted_at', null).order('created_at', { ascending: false }).limit(50),
+        supabase.from('users').select('id, name, initials, color, avatar_url'),
+      ]);
+      if (msgRes.error) console.error('Failed to fetch messages:', msgRes.error.message);
+      if (userRes.error) console.error('Failed to fetch users:', userRes.error.message);
+      setMessages(msgRes.data || []);
+      setUsers(userRes.data || []);
+    } catch (err: any) {
+      console.error('Message fetch error:', err);
+    }
   }, []);
 
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
@@ -88,13 +106,24 @@ export default function MessagesScreen() {
 
     setNewMessage('');
 
-    await supabase.from('messages').insert({
-      channel_id: selectedChannel,
-      sender_id: currentUser.id,
-      body,
-    });
+    try {
+      const { error } = await supabase.from('messages').insert({
+        channel_id: selectedChannel,
+        sender_id: currentUser.id,
+        body,
+      });
 
-    fetchMessages(selectedChannel);
+      if (error) {
+        Alert.alert('Send Error', 'Message could not be sent. Please try again.');
+        setNewMessage(body); // Restore the message so user can retry
+        return;
+      }
+
+      fetchMessages(selectedChannel);
+    } catch (err: any) {
+      Alert.alert('Send Error', err?.message || 'Failed to send message.');
+      setNewMessage(body);
+    }
   }, [newMessage, selectedChannel, currentUser, fetchMessages]);
 
   function getUser(id: string) { return users.find((u: any) => u.id === id); }

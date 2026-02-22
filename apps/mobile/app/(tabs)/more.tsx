@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '../../theme/tokens';
 import { useAuth } from '../../lib/auth';
@@ -14,15 +14,21 @@ export default function MoreScreen() {
 
   useEffect(() => {
     async function load() {
-      const { data: projData } = await supabase.from('projects').select('*').order('created_at');
-      setProjects(projData || []);
+      try {
+        const { data: projData, error: projError } = await supabase.from('projects').select('*').order('created_at');
+        if (projError) console.error('Failed to fetch projects:', projError.message);
+        setProjects(projData || []);
 
-      const { data: tasks } = await supabase.from('tasks').select('project_id');
-      const counts: Record<string, number> = {};
-      (tasks || []).forEach((t: any) => {
-        if (t.project_id) counts[t.project_id] = (counts[t.project_id] || 0) + 1;
-      });
-      setTaskCounts(counts);
+        const { data: tasks, error: taskError } = await supabase.from('tasks').select('project_id');
+        if (taskError) console.error('Failed to fetch task counts:', taskError.message);
+        const counts: Record<string, number> = {};
+        (tasks || []).forEach((t: any) => {
+          if (t.project_id) counts[t.project_id] = (counts[t.project_id] || 0) + 1;
+        });
+        setTaskCounts(counts);
+      } catch (err: any) {
+        console.error('More screen fetch error:', err);
+      }
     }
     load();
   }, []);

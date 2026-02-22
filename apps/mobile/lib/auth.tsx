@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import { supabase } from './supabase';
 import { Session } from '@supabase/supabase-js';
 
@@ -31,13 +32,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Failed to get session:', error.message);
+      }
       setSession(session);
       if (session?.user) {
         fetchUser(session.user.id);
       } else {
         setIsLoading(false);
       }
+    }).catch((err) => {
+      console.error('Unexpected error getting session:', err);
+      setIsLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -54,27 +61,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function fetchUser(authId: string) {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authId)
+        .single();
 
-    if (data) {
-      setCurrentUser({
-        id: data.id,
-        name: data.name,
-        color: data.color,
-        initials: data.initials,
-        email: data.email,
-        avatar_url: data.avatar_url,
-      });
+      if (error) {
+        console.error('Failed to fetch user profile:', error.message);
+        // Still allow the session — user might not have a profile row yet
+      } else if (data) {
+        setCurrentUser({
+          id: data.id,
+          name: data.name,
+          color: data.color,
+          initials: data.initials,
+          email: data.email,
+          avatar_url: data.avatar_url,
+        });
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching user:', err);
     }
     setIsLoading(false);
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        Alert.alert('Sign Out Error', error.message);
+      }
+    } catch (err: any) {
+      Alert.alert('Sign Out Error', err?.message || 'Failed to sign out');
+    }
     setSession(null);
     setCurrentUser(null);
   }
