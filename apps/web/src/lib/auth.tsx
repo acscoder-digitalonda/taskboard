@@ -210,7 +210,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          // Always show the Google account picker so users can switch accounts
+          prompt: "select_account",
+        },
+      },
     });
   }
 
@@ -218,6 +224,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setSession(null);
     setCurrentUser(null);
+    // Clear stale Supabase tokens from storage to prevent timeout on re-login
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith("sb-") || key.includes("supabase")) {
+          localStorage.removeItem(key);
+        }
+      }
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith("sb-") || key.includes("supabase")) {
+          sessionStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // Best-effort cleanup
+    }
   }
 
   return (
