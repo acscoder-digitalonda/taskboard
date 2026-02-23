@@ -19,12 +19,12 @@ import NotificationBell from "@/components/NotificationBell";
 import Toast from "@/components/Toast";
 import OnboardingModal from "@/components/OnboardingModal";
 import { shouldAutoShowOnboarding, incrementSeenCount } from "@/lib/onboarding";
+import UserMenu from "@/components/UserMenu";
 import {
   LayoutGrid,
   List,
   Sun,
   FolderOpen,
-  LogOut,
   MessageSquare,
   Search,
   HelpCircle,
@@ -236,24 +236,7 @@ function AppShell() {
               {user.name}
             </span>
 
-            <div
-              className="w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-xs overflow-hidden flex-shrink-0"
-              style={{ backgroundColor: user.color }}
-            >
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt={`${user.name} avatar`} className="w-full h-full object-cover" />
-              ) : (
-                user.initials
-              )}
-            </div>
-
-            <button
-              onClick={signOut}
-              className="hidden sm:block p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-              title="Sign out"
-            >
-              <LogOut size={16} />
-            </button>
+            <UserMenu user={user} onSignOut={signOut} />
           </div>
         </div>
       </header>
