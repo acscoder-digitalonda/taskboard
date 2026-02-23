@@ -88,7 +88,7 @@ export default function LoginPage() {
 
         <div className="text-center mt-6 space-y-2">
           <p className="text-xs text-gray-300">
-            Only @digitalonda.com accounts can sign in.
+            Only approved accounts can sign in. Contact your admin for access.
           </p>
           <button
             onClick={handleClearCache}

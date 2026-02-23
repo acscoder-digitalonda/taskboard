@@ -1,6 +1,6 @@
 export type TaskStatus = "backlog" | "doing" | "waiting" | "done";
 
-export type UserRole = "design" | "strategy" | "development" | "pm" | "agent" | "member";
+export type UserRole = "design" | "strategy" | "development" | "pm" | "content_writer" | "agent" | "member";
 
 export interface User {
   id: string;

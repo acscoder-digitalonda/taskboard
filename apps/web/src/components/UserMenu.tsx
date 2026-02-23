@@ -25,6 +25,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "strategy", label: "Strategy" },
   { value: "development", label: "Development" },
   { value: "pm", label: "Project Manager" },
+  { value: "content_writer", label: "Content Writer" },
   { value: "member", label: "Member" },
 ];
 

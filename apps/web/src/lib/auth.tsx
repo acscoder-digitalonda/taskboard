@@ -7,10 +7,10 @@ import { User, UserRole } from "@/types";
 import { ACCENT_COLORS } from "./utils";
 
 // ============================================
-// Email domain whitelist
-// Only these domains can sign in. Add more as needed.
+// Email allow list — checked against `allowed_emails` table in DB
+// If the table is empty or doesn't exist, falls back to domain check
 // ============================================
-const ALLOWED_DOMAINS = ["digitalonda.com"];
+const FALLBACK_ALLOWED_DOMAINS = ["digitalonda.com"];
 
 function generateInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -54,13 +54,38 @@ const AuthContext = createContext<AuthContextValue>({
 async function fetchOrUpsertPublicUser(session: Session): Promise<User | null> {
   const authUser = session.user;
 
-  // ── Domain whitelist check ───────────────────────────────
-  const domain = authUser.email?.split("@")[1]?.toLowerCase();
-  if (!domain || !ALLOWED_DOMAINS.includes(domain)) {
-    // Sign out immediately so the blocked session doesn't persist
+  // ── Email allow list check (DB-based) ────────────────────
+  const email = authUser.email?.toLowerCase();
+  if (!email) {
+    await supabase.auth.signOut();
+    throw new Error("No email associated with this account.");
+  }
+
+  // Check the allowed_emails table first
+  const { data: allowEntry, error: allowError } = await supabase
+    .from("allowed_emails")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  // If the table doesn't exist yet (allowError with code 42P01) or is empty,
+  // fall back to domain-based check for backwards compatibility
+  const tableNotReady = allowError && (allowError.code === "42P01" || allowError.message?.includes("does not exist"));
+
+  if (tableNotReady) {
+    // Fallback: domain whitelist
+    const domain = email.split("@")[1];
+    if (!domain || !FALLBACK_ALLOWED_DOMAINS.includes(domain)) {
+      await supabase.auth.signOut();
+      throw new Error(
+        `Your account (${email}) is not authorized. Contact your admin to get access.`
+      );
+    }
+  } else if (!allowEntry) {
+    // Table exists but email not found
     await supabase.auth.signOut();
     throw new Error(
-      `Only @${ALLOWED_DOMAINS.join(", @")} accounts can sign in. Your account (${authUser.email}) is not authorized.`
+      `Your account (${email}) is not on the allow list. Contact your admin to get access.`
     );
   }
 
