@@ -129,13 +129,13 @@ function AppShell() {
     return () => document.removeEventListener("keydown", handleKey);
   }, []);
 
-  // Auto-show onboarding for first 3 logins
+  // Auto-show onboarding only on first login
   const onboardingCheckedRef = useRef(false);
   useEffect(() => {
     if (!currentUserId || onboardingCheckedRef.current) return;
     onboardingCheckedRef.current = true;
 
-    // Check BEFORE incrementing so count 0,1,2 all pass the < 3 check
+    // Check BEFORE incrementing so first visit (count 0) passes the < 1 check
     const shouldShow = shouldAutoShowOnboarding(currentUserId);
     incrementSeenCount(currentUserId);
 

@@ -39,10 +39,10 @@ export function getOnboardingState(userId: string): OnboardingState {
   }
 }
 
-/** Should the onboarding auto-show? True if seenCount < 3 AND not dismissed. */
+/** Should the onboarding auto-show? True if seenCount < 1 AND not dismissed. */
 export function shouldAutoShowOnboarding(userId: string): boolean {
   const state = getOnboardingState(userId);
-  return !state.dismissedForever && state.seenCount < 3;
+  return !state.dismissedForever && state.seenCount < 1;
 }
 
 /** Increment the seen count by 1. Called once per login session. */
