@@ -5,8 +5,9 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, authError } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const displayError = authError || error;
   const [loading, setLoading] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -78,14 +79,16 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign in with Google"}
           </button>
 
-          {error && (
-            <p className="text-xs text-red-500 text-center mt-3">{error}</p>
+          {displayError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg">
+              <p className="text-xs text-red-600 text-center font-medium">{displayError}</p>
+            </div>
           )}
         </div>
 
         <div className="text-center mt-6 space-y-2">
           <p className="text-xs text-gray-300">
-            Only team members with authorized Google accounts can sign in.
+            Only @digitalonda.com accounts can sign in.
           </p>
           <button
             onClick={handleClearCache}

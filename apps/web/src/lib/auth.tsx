@@ -3,8 +3,14 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import { User } from "@/types";
+import { User, UserRole } from "@/types";
 import { ACCENT_COLORS } from "./utils";
+
+// ============================================
+// Email domain whitelist
+// Only these domains can sign in. Add more as needed.
+// ============================================
+const ALLOWED_DOMAINS = ["digitalonda.com"];
 
 function generateInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -12,24 +18,51 @@ function generateInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function mapRowToUser(row: Record<string, unknown>): User {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    color: row.color as string,
+    initials: row.initials as string,
+    email: row.email as string | undefined,
+    avatar_url: row.avatar_url as string | undefined,
+    role: (row.role as UserRole) || "member",
+    description: (row.description as string) || undefined,
+  };
+}
+
 interface AuthContextValue {
   session: Session | null;
   currentUser: User | null;
   isLoading: boolean;
+  authError: string | null;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  updateProfile: (updates: Partial<Pick<User, "name" | "role" | "description" | "color">>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   currentUser: null,
   isLoading: true,
+  authError: null,
   signInWithGoogle: async () => {},
   signOut: async () => {},
+  updateProfile: async () => {},
 });
 
 async function fetchOrUpsertPublicUser(session: Session): Promise<User | null> {
   const authUser = session.user;
+
+  // ── Domain whitelist check ───────────────────────────────
+  const domain = authUser.email?.split("@")[1]?.toLowerCase();
+  if (!domain || !ALLOWED_DOMAINS.includes(domain)) {
+    // Sign out immediately so the blocked session doesn't persist
+    await supabase.auth.signOut();
+    throw new Error(
+      `Only @${ALLOWED_DOMAINS.join(", @")} accounts can sign in. Your account (${authUser.email}) is not authorized.`
+    );
+  }
 
   const { data, error } = await supabase
     .from("users")
@@ -38,30 +71,15 @@ async function fetchOrUpsertPublicUser(session: Session): Promise<User | null> {
     .single();
 
   if (data) {
-    // Update name/avatar if changed on Google's side
-    const googleName = authUser.user_metadata?.full_name || authUser.user_metadata?.name;
-    const googleAvatar = authUser.user_metadata?.avatar_url;
-    if (googleName && (data.name !== googleName || data.avatar_url !== googleAvatar)) {
-      await supabase.from("users").update({
-        name: googleName,
-        avatar_url: googleAvatar,
-      }).eq("id", authUser.id);
-    }
-    return {
-      id: data.id,
-      name: data.name,
-      color: data.color,
-      initials: data.initials,
-      email: data.email,
-      avatar_url: data.avatar_url,
-    };
+    // Existing user — do NOT overwrite name/avatar (user may have customized them)
+    return mapRowToUser(data);
   }
 
-  // Trigger hasn't fired yet — insert manually as fallback
+  // New user — insert with Google metadata as defaults
   if (error) {
     const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split("@")[0] || "User";
     const initials = generateInitials(name);
-    const color = ACCENT_COLORS[0];
+    const color = ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)];
     const { data: inserted } = await supabase.from("users").upsert({
       id: authUser.id,
       email: authUser.email,
@@ -69,16 +87,10 @@ async function fetchOrUpsertPublicUser(session: Session): Promise<User | null> {
       initials,
       color,
       avatar_url: authUser.user_metadata?.avatar_url || null,
+      role: "member",
     }).select().single();
     if (inserted) {
-      return {
-        id: inserted.id,
-        name: inserted.name,
-        color: inserted.color,
-        initials: inserted.initials,
-        email: inserted.email,
-        avatar_url: inserted.avatar_url,
-      };
+      return mapRowToUser(inserted);
     }
   }
   return null;
@@ -115,15 +127,7 @@ async function fetchDevBypassUser(): Promise<User> {
 
     const rows = await res.json();
     if (rows.length > 0) {
-      const d = rows[0];
-      return {
-        id: d.id,
-        name: d.name,
-        color: d.color,
-        initials: d.initials,
-        email: d.email,
-        avatar_url: d.avatar_url,
-      };
+      return mapRowToUser(rows[0]);
     }
   } catch (err) {
     console.warn("fetchDevBypassUser failed, using fallback:", err);
@@ -135,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,10 +171,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (initialSession?.user) {
           const user = await fetchOrUpsertPublicUser(initialSession);
-          if (!cancelled) setCurrentUser(user);
+          if (!cancelled) {
+            setCurrentUser(user);
+            setAuthError(null);
+          }
         }
       } catch (err) {
         console.error("Auth init failed:", err);
+        if (!cancelled) {
+          setAuthError(err instanceof Error ? err.message : "Sign-in failed");
+          setCurrentUser(null);
+          setSession(null);
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -190,9 +203,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           try {
             const user = await fetchOrUpsertPublicUser(session);
-            if (!cancelled) setCurrentUser(user);
+            if (!cancelled) {
+              setCurrentUser(user);
+              setAuthError(null);
+            }
           } catch (err) {
             console.error("Auth state change user fetch failed:", err);
+            if (!cancelled) {
+              setAuthError(err instanceof Error ? err.message : "Sign-in failed");
+              setCurrentUser(null);
+              setSession(null);
+            }
           }
         } else {
           setCurrentUser(null);
@@ -208,6 +229,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signInWithGoogle() {
+    setAuthError(null);
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -224,6 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setSession(null);
     setCurrentUser(null);
+    setAuthError(null);
     // Clear stale Supabase tokens from storage to prevent timeout on re-login
     try {
       for (const key of Object.keys(localStorage)) {
@@ -241,8 +264,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function updateProfile(updates: Partial<Pick<User, "name" | "role" | "description" | "color">>) {
+    if (!currentUser) return;
+
+    // Build the DB update payload
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.name !== undefined) {
+      dbUpdates.name = updates.name;
+      dbUpdates.initials = generateInitials(updates.name);
+    }
+    if (updates.role !== undefined) dbUpdates.role = updates.role;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.color !== undefined) dbUpdates.color = updates.color;
+
+    const { error } = await supabase
+      .from("users")
+      .update(dbUpdates)
+      .eq("id", currentUser.id);
+
+    if (error) throw new Error(error.message);
+
+    // Update local state
+    setCurrentUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...updates,
+            initials: updates.name ? generateInitials(updates.name) : prev.initials,
+          }
+        : null
+    );
+  }
+
   return (
-    <AuthContext.Provider value={{ session, currentUser, isLoading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, currentUser, isLoading, authError, signInWithGoogle, signOut, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -6,7 +6,7 @@
  * the "What's New" section so users can see recent updates.
  */
 
-export const APP_VERSION = "1.4.0";
+export const APP_VERSION = "1.5.0";
 export const APP_BUILD_DATE = "2026-02-23";
 
 export interface ChangelogEntry {
@@ -17,6 +17,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.5.0",
+    date: "2026-02-23",
+    title: "Security & user profiles",
+    items: [
+      "Email domain whitelist — only @digitalonda.com accounts can sign in",
+      "Edit Profile in user menu — update name, role, and bio",
+      "Role selector (Design, Strategy, Development, PM, Member)",
+      "Profile data persists across logins (no longer overwritten by Google)",
+      "Deployed to Vercel with auto-deploy on push to main",
+    ],
+  },
   {
     version: "1.4.0",
     date: "2026-02-23",

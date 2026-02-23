@@ -130,6 +130,7 @@ async function fetchUsers(): Promise<User[]> {
     email: u.email,
     avatar_url: u.avatar_url,
     role: (u.role as UserRole) || "member",
+    description: u.description || undefined,
   }));
 }
 

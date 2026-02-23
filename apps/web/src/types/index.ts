@@ -10,6 +10,7 @@ export interface User {
   email?: string;
   avatar_url?: string;
   role?: UserRole;
+  description?: string;
 }
 
 export interface Project {
