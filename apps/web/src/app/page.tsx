@@ -17,6 +17,8 @@ import ProjectManager from "@/components/ProjectManager";
 import SearchPanel from "@/components/SearchPanel";
 import NotificationBell from "@/components/NotificationBell";
 import Toast from "@/components/Toast";
+import OnboardingModal from "@/components/OnboardingModal";
+import { shouldAutoShowOnboarding, incrementSeenCount } from "@/lib/onboarding";
 import {
   LayoutGrid,
   List,
@@ -25,6 +27,7 @@ import {
   LogOut,
   MessageSquare,
   Search,
+  HelpCircle,
 } from "lucide-react";
 
 export default function Home() {
@@ -84,6 +87,8 @@ function AppShell() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showProjectManager, setShowProjectManager] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingIsAutoShown, setOnboardingIsAutoShown] = useState(false);
   const { tasks, loading: tasksLoading } = useTasks();
   const {
     assigneeFilter,
@@ -123,6 +128,25 @@ function AppShell() {
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, []);
+
+  // Auto-show onboarding for first 3 logins
+  const onboardingCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!currentUserId || onboardingCheckedRef.current) return;
+    onboardingCheckedRef.current = true;
+
+    // Check BEFORE incrementing so count 0,1,2 all pass the < 3 check
+    const shouldShow = shouldAutoShowOnboarding(currentUserId);
+    incrementSeenCount(currentUserId);
+
+    if (shouldShow) {
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+        setOnboardingIsAutoShown(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [currentUserId]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -181,6 +205,18 @@ function AppShell() {
               <kbd className="hidden lg:inline text-xs bg-gray-100 px-1.5 py-0.5 rounded font-mono text-gray-400">
                 ⌘K
               </kbd>
+            </button>
+
+            {/* Help / Onboarding tour */}
+            <button
+              onClick={() => {
+                setShowOnboarding(true);
+                setOnboardingIsAutoShown(false);
+              }}
+              className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              title="Help & Tour"
+            >
+              <HelpCircle size={16} />
             </button>
 
             {/* Notifications */}
@@ -311,6 +347,15 @@ function AppShell() {
             }
           }}
           onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {/* Onboarding Modal */}
+      {showOnboarding && (
+        <OnboardingModal
+          onClose={() => setShowOnboarding(false)}
+          userId={currentUserId}
+          isAutoShown={onboardingIsAutoShown}
         />
       )}
 

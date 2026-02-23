@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 576" width="1024" height="576">
+  <defs>
+    <filter id="s1" x="-1%" y="-1%" width="102%" height="106%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.1"/>
+    </filter>
+    <filter id="s2" x="-2%" y="-4%" width="104%" height="112%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
+    </filter>
+    <filter id="notif-shadow" x="-4%" y="-4%" width="108%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="576" fill="#F9FAFB" rx="12"/>
+  <!-- Split pane container -->
+  <rect x="60" y="50" width="904" height="470" rx="14" fill="white" filter="url(#s1)"/>
+  <!-- LEFT: Channel list -->
+  <rect x="60" y="50" width="260" height="470" rx="14" fill="white"/>
+  <rect x="320" y="50" width="1" height="470" fill="#E5E7EB"/>
+  <!-- Channel header -->
+  <text x="82" y="82" font-family="Roboto,system-ui,sans-serif" font-size="14" font-weight="700" fill="#374151">Channels</text>
+  <rect x="260" y="68" width="42" height="22" rx="11" fill="#2196F3" opacity="0.1"/>
+  <text x="268" y="83" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="600" fill="#2196F3">+ New</text>
+  <!-- Channel items -->
+  <!-- #general (active) -->
+  <rect x="72" y="100" width="236" height="44" rx="8" fill="#E3F2FD"/>
+  <text x="92" y="118" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="600" fill="#2196F3"># general</text>
+  <text x="92" y="134" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="400" fill="#64B5F6">Latest: Team standup notes...</text>
+  <rect x="270" y="108" width="22" height="16" rx="8" fill="#2196F3"/>
+  <text x="281" y="120" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="700" fill="white" text-anchor="middle">3</text>
+  <!-- #design -->
+  <rect x="72" y="152" width="236" height="44" rx="8" fill="transparent"/>
+  <text x="92" y="170" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="500" fill="#374151"># design</text>
+  <text x="92" y="186" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="400" fill="#9CA3AF">Review new mockups by...</text>
+  <!-- #marketing -->
+  <rect x="72" y="204" width="236" height="44" rx="8" fill="transparent"/>
+  <text x="92" y="222" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="500" fill="#374151"># marketing</text>
+  <text x="92" y="238" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="400" fill="#9CA3AF">Campaign metrics shared...</text>
+  <rect x="270" y="212" width="22" height="16" rx="8" fill="#9CA3AF"/>
+  <text x="281" y="224" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="700" fill="white" text-anchor="middle">1</text>
+  <!-- #partnerships -->
+  <rect x="72" y="256" width="236" height="44" rx="8" fill="transparent"/>
+  <text x="92" y="274" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="500" fill="#374151"># partnerships</text>
+  <text x="92" y="290" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="400" fill="#9CA3AF">New client email received</text>
+  <!-- Email badge -->
+  <rect x="210" y="275" width="40" height="14" rx="7" fill="#FFF3E0"/>
+  <text x="220" y="285" font-family="Roboto,system-ui,sans-serif" font-size="7" font-weight="600" fill="#FF9800">EMAIL</text>
+  <!-- RIGHT: Chat thread -->
+  <rect x="321" y="50" width="643" height="48" rx="0" fill="#FAFAFA"/>
+  <rect x="321" y="50" width="643" height="48" fill="#FAFAFA"/>
+  <rect x="952" y="50" width="12" height="12" rx="7" fill="white"/>
+  <text x="340" y="80" font-family="Roboto,system-ui,sans-serif" font-size="14" font-weight="700" fill="#374151"># general</text>
+  <text x="430" y="80" font-family="Roboto,system-ui,sans-serif" font-size="11" font-weight="400" fill="#9CA3AF">5 members</text>
+  <!-- Chat messages -->
+  <!-- Message 1 -->
+  <circle cx="348" cy="128" r="14" fill="#00BCD4"/>
+  <text x="348" y="132" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="700" fill="white" text-anchor="middle">JH</text>
+  <text x="370" y="122" font-family="Roboto,system-ui,sans-serif" font-size="11" font-weight="600" fill="#374151">Jordan Howard</text>
+  <text x="470" y="122" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="400" fill="#9CA3AF">10:30 AM</text>
+  <rect x="370" y="130" width="360" height="32" rx="10" fill="#F3F4F6"/>
+  <text x="384" y="150" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="400" fill="#4B5563">Team standup notes: All tasks on track this week.</text>
+  <!-- Message 2 -->
+  <circle cx="348" cy="196" r="14" fill="#FF5722"/>
+  <text x="348" y="200" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="700" fill="white" text-anchor="middle">KT</text>
+  <text x="370" y="190" font-family="Roboto,system-ui,sans-serif" font-size="11" font-weight="600" fill="#374151">Katie Thompson</text>
+  <text x="480" y="190" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="400" fill="#9CA3AF">10:45 AM</text>
+  <rect x="370" y="198" width="300" height="32" rx="10" fill="#F3F4F6"/>
+  <text x="384" y="218" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="400" fill="#4B5563">Great! I pushed the new designs to Figma.</text>
+  <!-- Message 3 -->
+  <circle cx="348" cy="266" r="14" fill="#2196F3"/>
+  <text x="348" y="270" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="700" fill="white" text-anchor="middle">AN</text>
+  <text x="370" y="258" font-family="Roboto,system-ui,sans-serif" font-size="11" font-weight="600" fill="#374151">Alex Nguyen</text>
+  <text x="460" y="258" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="400" fill="#9CA3AF">11:02 AM</text>
+  <rect x="370" y="266" width="340" height="32" rx="10" fill="#F3F4F6"/>
+  <text x="384" y="286" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="400" fill="#4B5563">Looks great, will start implementing after lunch.</text>
+  <!-- Message input -->
+  <rect x="336" y="478" width="612" height="34" rx="17" fill="#F3F4F6" stroke="#E5E7EB" stroke-width="1"/>
+  <text x="358" y="500" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="400" fill="#D1D5DB">Type a message...</text>
+  <circle cx="930" cy="495" r="12" fill="#2196F3"/>
+  <path d="M926,495 L934,495 M930,491 L934,495 L930,499" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- NOTIFICATION BELL + DROPDOWN -->
+  <!-- Bell icon area (top right of the whole scene) -->
+  <circle cx="920" cy="34" r="16" fill="white" filter="url(#s2)"/>
+  <!-- Bell shape -->
+  <path d="M916,31 C916,27 918,24 920,24 C922,24 924,27 924,31 L924,34 C924,35 925,36 926,36 L914,36 C915,36 916,35 916,34 Z" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <circle cx="920" cy="39" r="1.5" fill="#6B7280"/>
+  <!-- Red badge -->
+  <circle cx="928" cy="26" r="7" fill="#EF4444"/>
+  <text x="928" y="29" font-family="Roboto,system-ui,sans-serif" font-size="8" font-weight="700" fill="white" text-anchor="middle">4</text>
+  <!-- Notification dropdown -->
+  <rect x="720" y="56" width="260" height="250" rx="12" fill="white" filter="url(#notif-shadow)"/>
+  <!-- Dropdown arrow -->
+  <polygon points="916,56 924,56 920,50" fill="white"/>
+  <!-- Header -->
+  <text x="740" y="80" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="700" fill="#374151">Notifications</text>
+  <rect x="916" y="68" width="46" height="18" rx="9" fill="#E3F2FD"/>
+  <text x="924" y="81" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="600" fill="#2196F3">4 new</text>
+  <line x1="720" y1="92" x2="980" y2="92" stroke="#F3F4F6" stroke-width="1"/>
+  <!-- Notification 1 -->
+  <rect x="732" y="100" width="236" height="44" rx="6" fill="#E3F2FD" opacity="0.5"/>
+  <circle cx="750" cy="122" r="10" fill="#FF5722"/>
+  <text x="750" y="126" font-family="Roboto,system-ui,sans-serif" font-size="7" font-weight="700" fill="white" text-anchor="middle">KT</text>
+  <text x="768" y="116" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="600" fill="#374151">Katie assigned you a task</text>
+  <text x="768" y="130" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="400" fill="#9CA3AF">Design homepage for ACME</text>
+  <circle cx="958" cy="118" r="3" fill="#2196F3"/>
+  <!-- Notification 2 -->
+  <rect x="732" y="150" width="236" height="44" rx="6" fill="#E3F2FD" opacity="0.5"/>
+  <circle cx="750" cy="172" r="10" fill="#2196F3"/>
+  <text x="750" y="176" font-family="Roboto,system-ui,sans-serif" font-size="7" font-weight="700" fill="white" text-anchor="middle">AN</text>
+  <text x="768" y="166" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="600" fill="#374151">Alex commented on task</text>
+  <text x="768" y="180" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="400" fill="#9CA3AF">UX Conversion Audit</text>
+  <circle cx="958" cy="168" r="3" fill="#2196F3"/>
+  <!-- Notification 3 -->
+  <rect x="732" y="200" width="236" height="44" rx="6" fill="transparent"/>
+  <circle cx="750" cy="222" r="10" fill="#4CAF50" opacity="0.2"/>
+  <!-- Check icon -->
+  <polyline points="745,222 748,225 755,219" fill="none" stroke="#4CAF50" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="768" y="216" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="500" fill="#6B7280">Task marked as Done</text>
+  <text x="768" y="230" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="400" fill="#9CA3AF">Setup analytics - 2h ago</text>
+  <!-- Notification 4 -->
+  <rect x="732" y="250" width="236" height="44" rx="6" fill="transparent"/>
+  <circle cx="750" cy="272" r="10" fill="#FF9800" opacity="0.2"/>
+  <rect x="745" y="268" width="10" height="7" rx="1.5" fill="none" stroke="#FF9800" stroke-width="1"/>
+  <polyline points="745,269 750,273 755,269" fill="none" stroke="#FF9800" stroke-width="0.8"/>
+  <text x="768" y="266" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="500" fill="#6B7280">New email received</text>
+  <text x="768" y="280" font-family="Roboto,system-ui,sans-serif" font-size="9" font-weight="400" fill="#9CA3AF">From: client@acme.com</text>
+  <!-- Title -->
+  <text x="512" y="548" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="600" fill="#6B7280" text-anchor="middle">Messages &amp; Notifications</text>
+</svg>
