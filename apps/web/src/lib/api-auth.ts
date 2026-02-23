@@ -78,3 +78,28 @@ export function verifyWebhookSecret(req: NextRequest): boolean {
   const provided = req.headers.get("x-webhook-secret");
   return provided === secret;
 }
+
+/**
+ * Verify an API key for external tool access.
+ * Checks the X-API-Key header against TASKBOARD_API_KEY env var.
+ * Fails closed — returns false if the env var is not configured.
+ */
+export function verifyApiKey(req: NextRequest): boolean {
+  const key = process.env.TASKBOARD_API_KEY;
+  if (!key) {
+    console.warn("TASKBOARD_API_KEY not configured — rejecting request");
+    return false;
+  }
+  const provided = req.headers.get("x-api-key");
+  return provided === key;
+}
+
+/**
+ * Helper to return a 403 Forbidden response for invalid API keys.
+ */
+export function forbiddenResponse() {
+  return NextResponse.json(
+    { error: "Forbidden. Provide a valid API key in the X-API-Key header." },
+    { status: 403 }
+  );
+}

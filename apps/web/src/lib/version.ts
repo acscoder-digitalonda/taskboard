@@ -6,7 +6,7 @@
  * the "What's New" section so users can see recent updates.
  */
 
-export const APP_VERSION = "1.5.0";
+export const APP_VERSION = "1.6.0";
 export const APP_BUILD_DATE = "2026-02-23";
 
 export interface ChangelogEntry {
@@ -17,6 +17,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.6.0",
+    date: "2026-02-23",
+    title: "External API",
+    items: [
+      "API key auth (X-API-Key header) for machine-to-machine access",
+      "GET /api/v1/members — list team members with profile info",
+      "GET /api/v1/tasks — task reports with status/date/assignee filters",
+      "POST /api/v1/tasks/assign — LLM-powered task creation from natural language",
+      "Shared task parser extracted for reuse across chat + API",
+    ],
+  },
   {
     version: "1.5.0",
     date: "2026-02-23",
