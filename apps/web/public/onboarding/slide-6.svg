@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 576" width="1024" height="576">
+  <defs>
+    <filter id="s1" x="-1%" y="-1%" width="102%" height="106%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.1"/>
+    </filter>
+    <filter id="s2" x="-3%" y="-4%" width="106%" height="112%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
+    </filter>
+    <filter id="drag-shadow" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="2" dy="4" stdDeviation="8" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="576" fill="#F9FAFB" rx="12"/>
+  <!-- Column: Backlog -->
+  <rect x="72" y="50" width="210" height="440" rx="12" fill="white" filter="url(#s1)"/>
+  <circle cx="92" cy="76" r="5" fill="#9E9E9E"/>
+  <text x="104" y="80" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="700" fill="#374151">Backlog</text>
+  <rect x="196" y="68" width="20" height="18" rx="9" fill="#F3F4F6"/>
+  <text x="206" y="81" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="600" fill="#9CA3AF" text-anchor="middle">2</text>
+  <!-- Backlog card 1 -->
+  <rect x="84" y="100" width="186" height="68" rx="8" fill="#FAFAFA" stroke="#E5E7EB" stroke-width="1" filter="url(#s2)"/>
+  <text x="96" y="120" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="600" fill="#374151">Update brand guide</text>
+  <rect x="96" y="130" width="120" height="6" rx="3" fill="#E5E7EB"/>
+  <rect x="96" y="144" width="50" height="16" rx="8" fill="#F3F4F6"/>
+  <text x="108" y="155" font-family="Roboto,system-ui,sans-serif" font-size="8" font-weight="500" fill="#9CA3AF">Backlog</text>
+  <circle cx="254" cy="152" r="8" fill="#2196F3"/>
+  <text x="254" y="156" font-family="Roboto,system-ui,sans-serif" font-size="7" font-weight="700" fill="white" text-anchor="middle">AN</text>
+  <!-- Ghost/placeholder where dragged card was -->
+  <rect x="84" y="180" width="186" height="68" rx="8" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1" stroke-dasharray="6,3" opacity="0.5"/>
+  <rect x="96" y="194" width="110" height="7" rx="3" fill="#E5E7EB" opacity="0.4"/>
+  <rect x="96" y="208" width="80" height="6" rx="3" fill="#E5E7EB" opacity="0.3"/>
+  <!-- Column: Doing -->
+  <rect x="302" y="50" width="210" height="440" rx="12" fill="white" filter="url(#s1)"/>
+  <circle cx="322" cy="76" r="5" fill="#00BCD4"/>
+  <text x="334" y="80" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="700" fill="#374151">Doing</text>
+  <rect x="420" y="68" width="20" height="18" rx="9" fill="#E0F7FA"/>
+  <text x="430" y="81" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="600" fill="#00BCD4" text-anchor="middle">2</text>
+  <!-- Doing card 1 -->
+  <rect x="314" y="100" width="186" height="68" rx="8" fill="#FAFAFA" stroke="#B2EBF2" stroke-width="1" filter="url(#s2)"/>
+  <text x="326" y="120" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="600" fill="#374151">UX Conversion Audit</text>
+  <rect x="326" y="130" width="140" height="6" rx="3" fill="#E0F7FA"/>
+  <rect x="326" y="144" width="44" height="16" rx="8" fill="#E0F7FA"/>
+  <text x="336" y="155" font-family="Roboto,system-ui,sans-serif" font-size="8" font-weight="600" fill="#00BCD4">Doing</text>
+  <circle cx="484" cy="152" r="8" fill="#00BCD4"/>
+  <text x="484" y="156" font-family="Roboto,system-ui,sans-serif" font-size="7" font-weight="700" fill="white" text-anchor="middle">JH</text>
+  <!-- Drop zone indicator -->
+  <rect x="314" y="178" width="186" height="4" rx="2" fill="#4CAF50" opacity="0.5"/>
+  <!-- DRAGGING CARD - rotated and with shadow -->
+  <g transform="translate(340, 192) rotate(-2)">
+    <rect x="0" y="0" width="186" height="68" rx="8" fill="white" stroke="#4CAF50" stroke-width="2" stroke-dasharray="6,3" filter="url(#drag-shadow)"/>
+    <text x="12" y="20" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="600" fill="#374151">Design new landing</text>
+    <rect x="12" y="30" width="130" height="6" rx="3" fill="#E0F7FA"/>
+    <rect x="12" y="44" width="44" height="16" rx="8" fill="#E0F7FA"/>
+    <text x="22" y="55" font-family="Roboto,system-ui,sans-serif" font-size="8" font-weight="600" fill="#00BCD4">Doing</text>
+    <circle cx="170" cy="52" r="8" fill="#FF5722"/>
+    <text x="170" y="56" font-family="Roboto,system-ui,sans-serif" font-size="7" font-weight="700" fill="white" text-anchor="middle">KT</text>
+    <!-- Grab cursor icon -->
+    <rect x="80" y="-2" width="26" height="8" rx="4" fill="#4CAF50" opacity="0.8"/>
+    <line x1="86" y1="0" x2="86" y2="4" stroke="white" stroke-width="1" stroke-linecap="round"/>
+    <line x1="90" y1="0" x2="90" y2="4" stroke="white" stroke-width="1" stroke-linecap="round"/>
+    <line x1="94" y1="0" x2="94" y2="4" stroke="white" stroke-width="1" stroke-linecap="round"/>
+    <line x1="98" y1="0" x2="98" y2="4" stroke="white" stroke-width="1" stroke-linecap="round"/>
+  </g>
+  <!-- Curved arrow from Backlog to Doing -->
+  <path d="M 200,214 C 220,270 280,270 360,220" fill="none" stroke="#4CAF50" stroke-width="2" stroke-dasharray="6,3" opacity="0.6"/>
+  <polygon points="358,215 365,222 354,224" fill="#4CAF50" opacity="0.6"/>
+  <!-- Column: Waiting -->
+  <rect x="532" y="50" width="210" height="440" rx="12" fill="white" filter="url(#s1)"/>
+  <circle cx="552" cy="76" r="5" fill="#FFD600"/>
+  <text x="564" y="80" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="700" fill="#374151">Waiting</text>
+  <rect x="654" y="68" width="20" height="18" rx="9" fill="#FFF9C4"/>
+  <text x="664" y="81" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="600" fill="#D97706" text-anchor="middle">1</text>
+  <!-- Waiting card -->
+  <rect x="544" y="100" width="186" height="68" rx="8" fill="#FAFAFA" stroke="#FDE68A" stroke-width="1" filter="url(#s2)"/>
+  <text x="556" y="120" font-family="Roboto,system-ui,sans-serif" font-size="12" font-weight="600" fill="#374151">Client proposal review</text>
+  <rect x="556" y="130" width="130" height="6" rx="3" fill="#FFF9C4"/>
+  <rect x="556" y="144" width="52" height="16" rx="8" fill="#FFF9C4"/>
+  <text x="566" y="155" font-family="Roboto,system-ui,sans-serif" font-size="8" font-weight="600" fill="#D97706">Waiting</text>
+  <circle cx="714" cy="152" r="8" fill="#9C27B0"/>
+  <text x="714" y="156" font-family="Roboto,system-ui,sans-serif" font-size="7" font-weight="700" fill="white" text-anchor="middle">RG</text>
+  <!-- Column: Done -->
+  <rect x="762" y="50" width="190" height="440" rx="12" fill="white" filter="url(#s1)"/>
+  <circle cx="782" cy="76" r="5" fill="#4CAF50"/>
+  <text x="794" y="80" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="700" fill="#374151">Done</text>
+  <rect x="868" y="68" width="20" height="18" rx="9" fill="#E8F5E9"/>
+  <text x="878" y="81" font-family="Roboto,system-ui,sans-serif" font-size="10" font-weight="600" fill="#4CAF50" text-anchor="middle">2</text>
+  <!-- Done cards -->
+  <rect x="774" y="100" width="166" height="56" rx="8" fill="#FAFAFA" stroke="#C8E6C9" stroke-width="1" filter="url(#s2)"/>
+  <text x="786" y="118" font-family="Roboto,system-ui,sans-serif" font-size="11" font-weight="500" fill="#6B7280" text-decoration="line-through">Setup analytics</text>
+  <rect x="786" y="130" width="40" height="14" rx="7" fill="#E8F5E9"/>
+  <text x="794" y="140" font-family="Roboto,system-ui,sans-serif" font-size="8" font-weight="600" fill="#4CAF50">Done</text>
+  <rect x="774" y="166" width="166" height="56" rx="8" fill="#FAFAFA" stroke="#C8E6C9" stroke-width="1" filter="url(#s2)"/>
+  <text x="786" y="184" font-family="Roboto,system-ui,sans-serif" font-size="11" font-weight="500" fill="#6B7280" text-decoration="line-through">Fix login bug</text>
+  <rect x="786" y="196" width="40" height="14" rx="7" fill="#E8F5E9"/>
+  <text x="794" y="206" font-family="Roboto,system-ui,sans-serif" font-size="8" font-weight="600" fill="#4CAF50">Done</text>
+  <!-- Title -->
+  <text x="512" y="548" font-family="Roboto,system-ui,sans-serif" font-size="13" font-weight="600" fill="#6B7280" text-anchor="middle">Drag &amp; Drop</text>
+</svg>

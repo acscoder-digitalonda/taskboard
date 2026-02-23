@@ -51,6 +51,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
   const [notifyLevel, setNotifyLevel] = useState<NotifyLevel>("in_app");
   const [isCreating, setIsCreating] = useState(false);
   const [aiParsing, setAiParsing] = useState(false);
+  const [aiConnected, setAiConnected] = useState<boolean | null>(null); // null = unknown, true = connected, false = fallback
   const [isOpen, setIsOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -58,6 +59,22 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Check AI availability on mount
+  useEffect(() => {
+    async function checkAI() {
+      try {
+        const res = await fetch("/api/chat/status");
+        if (res.ok) {
+          const data = await res.json();
+          setAiConnected(data.ai_available === true);
+        }
+      } catch {
+        // Network error — leave as unknown
+      }
+    }
+    checkAI();
+  }, []);
 
   async function handleSend() {
     if (!input.trim() || aiParsing) return;
@@ -95,6 +112,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
       const data = await res.json();
 
       if (data.success && data.parsed) {
+        setAiConnected(true);
         const parsed = data.parsed;
         // Apply defaults
         if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
@@ -112,7 +130,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
         const botMsg: ChatMessage = {
           id: "bot-" + Date.now(),
           role: "bot",
-          text: `Here's what I've got (${confidenceLabel}):`,
+          text: `✨ Here's what I've got (${confidenceLabel}):`,
           taskPreview: parsed,
         };
 
@@ -128,6 +146,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
       }
     } catch {
       // Fallback to regex parser
+      setAiConnected(false);
       const parsed = parseTaskInput(text);
       if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
       if (!parsed.status) parsed.status = "doing";
@@ -136,7 +155,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
       const botMsg: ChatMessage = {
         id: "bot-" + Date.now(),
         role: "bot",
-        text: "Here's what I've got:",
+        text: "Here's what I've got (basic parsing — AI unavailable):",
         taskPreview: parsed,
       };
 
@@ -235,6 +254,18 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
           <MessageSquare size={18} />
           <span className="font-bold text-sm">Quick Task</span>
           <Sparkles size={12} className="opacity-70" />
+          {aiConnected !== null && (
+            <span
+              className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                aiConnected
+                  ? "bg-white/20 text-white/90"
+                  : "bg-yellow-400/30 text-yellow-100"
+              }`}
+              title={aiConnected ? "Claude Sonnet connected" : "AI unavailable — using basic parser"}
+            >
+              {aiConnected ? "AI" : "Basic"}
+            </span>
+          )}
         </div>
         {isOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
       </button>

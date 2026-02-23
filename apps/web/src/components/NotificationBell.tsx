@@ -82,7 +82,7 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-12 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-[100]">
+        <div className="fixed inset-x-2 top-14 sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 w-auto sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-[100]">
           {/* Header */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">Notifications</h3>

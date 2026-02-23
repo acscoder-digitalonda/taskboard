@@ -149,10 +149,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Race getSession against a timeout to prevent infinite hangs
+        // Race getSession against a timeout to prevent infinite hangs.
+        // 8s gives slow networks a fair chance while still recovering from
+        // stale tokens that cause Supabase to hang indefinitely.
         const sessionResult = await Promise.race([
           supabase.auth.getSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
         ]);
 
         if (cancelled) return;
@@ -208,7 +210,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          // Always show the Google account picker so users can switch accounts
+          prompt: "select_account",
+        },
+      },
     });
   }
 
@@ -216,6 +224,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setSession(null);
     setCurrentUser(null);
+    // Clear stale Supabase tokens from storage to prevent timeout on re-login
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith("sb-") || key.includes("supabase")) {
+          localStorage.removeItem(key);
+        }
+      }
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith("sb-") || key.includes("supabase")) {
+          sessionStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // Best-effort cleanup
+    }
   }
 
   return (

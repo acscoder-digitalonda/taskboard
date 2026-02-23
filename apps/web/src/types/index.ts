@@ -1,5 +1,7 @@
 export type TaskStatus = "backlog" | "doing" | "waiting" | "done";
 
+export type UserRole = "design" | "strategy" | "development" | "pm" | "agent" | "member";
+
 export interface User {
   id: string;
   name: string;
@@ -7,6 +9,7 @@ export interface User {
   initials: string;
   email?: string;
   avatar_url?: string;
+  role?: UserRole;
 }
 
 export interface Project {
@@ -47,6 +50,8 @@ export interface Task {
   drive_links: string[];
   notes: string[];
   sort_order?: number;
+  email_draft_id?: string;
+  source_email_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -177,7 +182,8 @@ export type NotificationType =
   | "channel_message"
   | "checkin_due"
   | "agent_report"
-  | "email_ingested";
+  | "email_ingested"
+  | "email_triage";
 
 export type NotificationChannel = "in_app" | "whatsapp" | "email";
 
@@ -288,6 +294,34 @@ export interface EmailDraft {
   sent_at: string | null;
   sent_gmail_id: string | null;
   error_message: string | null;
+  triage_category: string | null;
+  triage_reasoning: string | null;
+  triage_confidence: number | null;
+  linked_task_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================
+// Project Context Types (knowledge base)
+// ============================================
+
+export type ProjectDocType =
+  | "strategy_brief"
+  | "brand_guidelines"
+  | "decision_log"
+  | "client_preferences"
+  | "meeting_notes"
+  | "agent_config";
+
+export interface ProjectContext {
+  id: string;
+  project_id: string;
+  doc_type: ProjectDocType;
+  title: string;
+  content: string;
+  version: number;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
 }

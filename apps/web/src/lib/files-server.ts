@@ -1,0 +1,118 @@
+import { createServerSupabase } from "@/lib/api-auth";
+
+const BUCKET = "files";
+const APP_PREFIX = "taskboard";
+
+/**
+ * Server-side file upload from a URL (for processing email attachments).
+ *
+ * Downloads the file from the given URL, uploads to Supabase Storage,
+ * and creates a record in the files table.
+ */
+export async function uploadFileFromUrl(
+  url: string,
+  options: {
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    projectId?: string;
+    channelId?: string;
+    messageId?: string;
+    taskId?: string;
+  }
+): Promise<{ id: string; storage_path: string } | null> {
+  const supabase = createServerSupabase();
+  const timestamp = Date.now();
+  const safeName = options.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  // Build storage path
+  let storagePath: string;
+  if (options.projectId) {
+    storagePath = `${APP_PREFIX}/projects/${options.projectId}/email-attachments/${timestamp}-${safeName}`;
+  } else {
+    storagePath = `${APP_PREFIX}/email-attachments/${timestamp}-${safeName}`;
+  }
+
+  try {
+    // Fetch the file content
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Failed to download attachment from ${url}: ${response.status}`);
+      return null;
+    }
+
+    const buffer = await response.arrayBuffer();
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: options.mimeType || "application/octet-stream",
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Error uploading email attachment:", uploadError);
+      return null;
+    }
+
+    // Create record in files table
+    const { data, error: dbError } = await supabase
+      .from("files")
+      .insert({
+        name: options.fileName,
+        storage_path: storagePath,
+        mime_type: options.mimeType || null,
+        size_bytes: options.sizeBytes || buffer.byteLength,
+        uploaded_by: null, // System upload (from email)
+        channel_id: options.channelId || null,
+        message_id: options.messageId || null,
+        task_id: options.taskId || null,
+        project_id: options.projectId || null,
+      })
+      .select("id, storage_path")
+      .single();
+
+    if (dbError || !data) {
+      console.error("Error creating file record for attachment:", dbError);
+      // Clean up orphaned storage file
+      await supabase.storage.from(BUCKET).remove([storagePath]);
+      return null;
+    }
+
+    return { id: data.id, storage_path: data.storage_path };
+  } catch (error) {
+    console.error("Error processing email attachment:", error);
+    return null;
+  }
+}
+
+/**
+ * Link existing file records to a task (used after triage creates a task
+ * from an email that had attachments).
+ */
+export async function linkFilesToTask(
+  fileIds: string[],
+  taskId: string
+): Promise<void> {
+  if (!fileIds.length) return;
+
+  const supabase = createServerSupabase();
+
+  for (const fileId of fileIds) {
+    await supabase
+      .from("files")
+      .update({ task_id: taskId })
+      .eq("id", fileId);
+  }
+}
+
+/**
+ * Format file size for display in messages.
+ */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}

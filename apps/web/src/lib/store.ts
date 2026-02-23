@@ -1,6 +1,6 @@
 "use client";
 
-import { Task, TaskStatus, Project, TaskSection, User } from "@/types";
+import { Task, TaskStatus, Project, TaskSection, User, UserRole } from "@/types";
 import { supabase } from "./supabase";
 import { deleteProjectFiles } from "./files";
 import { ACCENT_COLORS } from "./utils";
@@ -86,6 +86,8 @@ async function fetchTasks(): Promise<Task[]> {
     drive_links: t.drive_links || [],
     notes: t.notes || [],
     sort_order: t.sort_order || 0,
+    email_draft_id: t.email_draft_id || undefined,
+    source_email_id: t.source_email_id || undefined,
     created_at: t.created_at,
     updated_at: t.updated_at,
   }));
@@ -127,6 +129,7 @@ async function fetchUsers(): Promise<User[]> {
     initials: u.initials,
     email: u.email,
     avatar_url: u.avatar_url,
+    role: (u.role as UserRole) || "member",
   }));
 }
 

@@ -88,7 +88,7 @@ function DroppableColumn({
 
       <div
         ref={setNodeRef}
-        className={`space-y-2 min-h-[200px] p-2 rounded-xl transition-colors ${
+        className={`space-y-2 min-h-[80px] sm:min-h-[200px] p-2 rounded-xl transition-colors ${
           isOver ? "bg-cyan-50 ring-2 ring-cyan-200" : "bg-gray-50/50"
         }`}
       >
@@ -171,7 +171,7 @@ export default function BoardView({
               <div className="w-3 h-3 rounded-full bg-gray-200 animate-pulse" />
               <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
             </div>
-            <div className="space-y-2 min-h-[200px] p-2 rounded-xl bg-gray-50/50">
+            <div className="space-y-2 min-h-[80px] sm:min-h-[200px] p-2 rounded-xl bg-gray-50/50">
               {[1, 2].map((i) => (
                 <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
               ))}
