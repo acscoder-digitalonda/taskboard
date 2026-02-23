@@ -27,7 +27,6 @@ import {
   FolderOpen,
   MessageSquare,
   Search,
-  HelpCircle,
 } from "lucide-react";
 
 export default function Home() {
@@ -89,6 +88,7 @@ function AppShell() {
   const [showSearch, setShowSearch] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingIsAutoShown, setOnboardingIsAutoShown] = useState(false);
+  const [aiConnected, setAiConnected] = useState<boolean | null>(null);
   const { tasks, loading: tasksLoading } = useTasks();
   const {
     assigneeFilter,
@@ -147,6 +147,22 @@ function AppShell() {
       return () => clearTimeout(timer);
     }
   }, [currentUserId]);
+
+  // Check AI availability on mount
+  useEffect(() => {
+    async function checkAI() {
+      try {
+        const res = await fetch("/api/chat/status");
+        if (res.ok) {
+          const data = await res.json();
+          setAiConnected(data.ai_available === true);
+        }
+      } catch {
+        // Network error — leave as unknown
+      }
+    }
+    checkAI();
+  }, []);
 
   return (
     <div className="min-h-screen bg-white">
@@ -207,18 +223,6 @@ function AppShell() {
               </kbd>
             </button>
 
-            {/* Help / Onboarding tour */}
-            <button
-              onClick={() => {
-                setShowOnboarding(true);
-                setOnboardingIsAutoShown(false);
-              }}
-              className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-              title="Help & Tour"
-            >
-              <HelpCircle size={16} />
-            </button>
-
             {/* Notifications */}
             <NotificationBell userId={currentUserId} />
 
@@ -236,7 +240,15 @@ function AppShell() {
               {user.name}
             </span>
 
-            <UserMenu user={user} onSignOut={signOut} />
+            <UserMenu
+              user={user}
+              onSignOut={signOut}
+              aiConnected={aiConnected}
+              onOpenOnboarding={() => {
+                setShowOnboarding(true);
+                setOnboardingIsAutoShown(false);
+              }}
+            />
           </div>
         </div>
       </header>
@@ -296,7 +308,7 @@ function AppShell() {
               {/* Chat panel (sidebar) — only for task views */}
               <div className="w-[380px] flex-shrink-0 hidden lg:block">
                 <div className="sticky top-[90px]">
-                  <ChatPanel currentUserId={currentUserId} />
+                  <ChatPanel currentUserId={currentUserId} aiConnected={aiConnected} />
                 </div>
               </div>
             </div>

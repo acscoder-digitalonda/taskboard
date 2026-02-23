@@ -34,9 +34,10 @@ interface ChatMessage {
 
 interface ChatPanelProps {
   currentUserId: string;
+  aiConnected?: boolean | null;
 }
 
-export default function ChatPanel({ currentUserId }: ChatPanelProps) {
+export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp }: ChatPanelProps) {
   const users = useUsers();
   const { projects } = useProjects();
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -51,7 +52,9 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
   const [notifyLevel, setNotifyLevel] = useState<NotifyLevel>("in_app");
   const [isCreating, setIsCreating] = useState(false);
   const [aiParsing, setAiParsing] = useState(false);
-  const [aiConnected, setAiConnected] = useState<boolean | null>(null); // null = unknown, true = connected, false = fallback
+  // Use prop if provided, otherwise track internally
+  const [aiConnectedLocal, setAiConnectedLocal] = useState<boolean | null>(null);
+  const aiConnected = aiConnectedProp ?? aiConnectedLocal;
   const [isOpen, setIsOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,22 +62,6 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Check AI availability on mount
-  useEffect(() => {
-    async function checkAI() {
-      try {
-        const res = await fetch("/api/chat/status");
-        if (res.ok) {
-          const data = await res.json();
-          setAiConnected(data.ai_available === true);
-        }
-      } catch {
-        // Network error — leave as unknown
-      }
-    }
-    checkAI();
-  }, []);
 
   async function handleSend() {
     if (!input.trim() || aiParsing) return;
@@ -112,7 +99,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
       const data = await res.json();
 
       if (data.success && data.parsed) {
-        setAiConnected(true);
+        setAiConnectedLocal(true);
         const parsed = data.parsed;
         // Apply defaults
         if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
@@ -146,7 +133,7 @@ export default function ChatPanel({ currentUserId }: ChatPanelProps) {
       }
     } catch {
       // Fallback to regex parser
-      setAiConnected(false);
+      setAiConnectedLocal(false);
       const parsed = parseTaskInput(text);
       if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
       if (!parsed.status) parsed.status = "doing";

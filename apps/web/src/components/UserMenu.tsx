@@ -2,15 +2,36 @@
 
 import { useState, useRef, useEffect } from "react";
 import { User } from "@/types";
-import { LogOut, ChevronDown } from "lucide-react";
+import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from "@/lib/version";
+import {
+  LogOut,
+  ChevronDown,
+  Info,
+  Sparkles,
+  ChevronRight,
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+} from "lucide-react";
+
+type MenuView = "main" | "whats-new";
 
 interface UserMenuProps {
   user: User;
   onSignOut: () => void;
+  aiConnected?: boolean | null;
+  onOpenOnboarding?: () => void;
 }
 
-export default function UserMenu({ user, onSignOut }: UserMenuProps) {
+export default function UserMenu({
+  user,
+  onSignOut,
+  aiConnected,
+  onOpenOnboarding,
+}: UserMenuProps) {
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<MenuView>("main");
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close on click outside
@@ -22,7 +43,13 @@ export default function UserMenu({ user, onSignOut }: UserMenuProps) {
       }
     }
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        if (view !== "main") {
+          setView("main");
+        } else {
+          setOpen(false);
+        }
+      }
     }
     document.addEventListener("mousedown", handleClick);
     document.addEventListener("keydown", handleKey);
@@ -30,6 +57,11 @@ export default function UserMenu({ user, onSignOut }: UserMenuProps) {
       document.removeEventListener("mousedown", handleClick);
       document.removeEventListener("keydown", handleKey);
     };
+  }, [open, view]);
+
+  // Reset to main view when closing
+  useEffect(() => {
+    if (!open) setView("main");
   }, [open]);
 
   return (
@@ -67,53 +99,206 @@ export default function UserMenu({ user, onSignOut }: UserMenuProps) {
 
       {/* Dropdown menu */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl border border-gray-100 shadow-lg py-1 z-[100] animate-in fade-in slide-in-from-top-1 duration-150">
-          {/* User info */}
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm overflow-hidden flex-shrink-0"
-                style={{ backgroundColor: user.color }}
-              >
-                {user.avatar_url ? (
-                  <img
-                    src={user.avatar_url}
-                    alt={`${user.name} avatar`}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  user.initials
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-900 truncate">
-                  {user.name}
-                </p>
-                {user.email && (
-                  <p className="text-xs text-gray-400 truncate">{user.email}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Sign out = switch account */}
-          <div className="py-1">
-            <button
-              onClick={() => {
+        <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-gray-100 shadow-lg z-[100] overflow-hidden">
+          {view === "main" ? (
+            <MainView
+              user={user}
+              aiConnected={aiConnected}
+              onSignOut={() => {
                 setOpen(false);
                 onSignOut();
               }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-            >
-              <LogOut size={15} className="text-gray-400" />
-              <div className="text-left">
-                <span>Sign out</span>
-                <p className="text-xs text-gray-400 font-normal">Switch to another account</p>
-              </div>
-            </button>
-          </div>
+              onWhatsNew={() => setView("whats-new")}
+              onOpenOnboarding={() => {
+                setOpen(false);
+                onOpenOnboarding?.();
+              }}
+            />
+          ) : (
+            <WhatsNewView onBack={() => setView("main")} />
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function MainView({
+  user,
+  aiConnected,
+  onSignOut,
+  onWhatsNew,
+  onOpenOnboarding,
+}: {
+  user: User;
+  aiConnected?: boolean | null;
+  onSignOut: () => void;
+  onWhatsNew: () => void;
+  onOpenOnboarding: () => void;
+}) {
+  return (
+    <>
+      {/* User info */}
+      <div className="px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm overflow-hidden flex-shrink-0"
+            style={{ backgroundColor: user.color }}
+          >
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={`${user.name} avatar`}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              user.initials
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-gray-900 truncate">
+              {user.name}
+            </p>
+            {user.email && (
+              <p className="text-xs text-gray-400 truncate">{user.email}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* App info section */}
+      <div className="px-4 py-3 border-b border-gray-100 space-y-2">
+        {/* Version */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Info size={13} className="text-gray-400" />
+            <span className="text-xs font-medium text-gray-500">Version</span>
+          </div>
+          <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+            v{APP_VERSION}
+          </span>
+        </div>
+
+        {/* AI Status */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles size={13} className="text-gray-400" />
+            <span className="text-xs font-medium text-gray-500">
+              AI Parsing
+            </span>
+          </div>
+          {aiConnected === null ? (
+            <span className="text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
+              Checking...
+            </span>
+          ) : aiConnected ? (
+            <span className="text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <CheckCircle2 size={10} />
+              Sonnet connected
+            </span>
+          ) : (
+            <span className="text-xs font-bold text-yellow-700 bg-yellow-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <AlertCircle size={10} />
+              Basic mode
+            </span>
+          )}
+        </div>
+
+        {/* Build date */}
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-gray-300">
+            Built {APP_BUILD_DATE}
+          </span>
+        </div>
+      </div>
+
+      {/* Menu items */}
+      <div className="py-1">
+        {/* What's New */}
+        <button
+          onClick={onWhatsNew}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Sparkles size={15} className="text-cyan-500" />
+            <span>What&apos;s New</span>
+          </div>
+          <ChevronRight size={14} className="text-gray-300" />
+        </button>
+
+        {/* Help & Tour */}
+        <button
+          onClick={onOpenOnboarding}
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+        >
+          <HelpCircle size={15} className="text-gray-400" />
+          <span>Help &amp; Tour</span>
+        </button>
+
+        {/* Sign out */}
+        <button
+          onClick={onSignOut}
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+        >
+          <LogOut size={15} className="text-gray-400" />
+          <div className="text-left">
+            <span>Sign out</span>
+            <p className="text-xs text-gray-400 font-normal">
+              Switch to another account
+            </p>
+          </div>
+        </button>
+      </div>
+    </>
+  );
+}
+
+function WhatsNewView({ onBack }: { onBack: () => void }) {
+  return (
+    <>
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <button
+          onClick={onBack}
+          className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <ArrowLeft size={14} className="text-gray-500" />
+        </button>
+        <span className="text-sm font-bold text-gray-900">
+          What&apos;s New
+        </span>
+      </div>
+
+      {/* Changelog entries */}
+      <div className="max-h-[400px] overflow-y-auto">
+        {CHANGELOG.map((entry, i) => (
+          <div
+            key={entry.version}
+            className={`px-4 py-3 ${i < CHANGELOG.length - 1 ? "border-b border-gray-50" : ""}`}
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-xs font-bold text-cyan-600 bg-cyan-50 px-1.5 py-0.5 rounded">
+                v{entry.version}
+              </span>
+              <span className="text-[10px] text-gray-400">{entry.date}</span>
+            </div>
+            <p className="text-xs font-bold text-gray-800 mb-1">
+              {entry.title}
+            </p>
+            <ul className="space-y-0.5">
+              {entry.items.map((item, j) => (
+                <li
+                  key={j}
+                  className="text-[11px] text-gray-500 flex items-start gap-1.5"
+                >
+                  <span className="text-cyan-400 mt-0.5 flex-shrink-0">•</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
