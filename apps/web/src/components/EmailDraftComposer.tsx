@@ -443,9 +443,9 @@ export default function EmailDraftComposer({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center gap-2">
+      <div className="px-3 sm:px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center flex-wrap gap-1.5 sm:gap-2">
         {/* Save status */}
-        <div className="flex-1 text-xs text-gray-400">
+        <div className="flex-1 min-w-0 text-xs text-gray-400">
           {saving && (
             <span className="flex items-center gap-1">
               <Loader2 size={10} className="animate-spin" /> Saving...

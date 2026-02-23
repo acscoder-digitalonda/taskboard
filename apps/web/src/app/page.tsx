@@ -146,34 +146,34 @@ function AppShell() {
           </div>
 
           {/* View tabs */}
-          <div className="flex items-center bg-gray-50 rounded-xl p-1 gap-0.5">
+          <div className="flex items-center bg-gray-50 rounded-xl p-0.5 sm:p-1 gap-0.5">
             {[
               { mode: "myday" as ViewMode, icon: Sun, label: "My Day" },
               { mode: "board" as ViewMode, icon: LayoutGrid, label: "Board" },
               { mode: "list" as ViewMode, icon: List, label: "List" },
-              { mode: "messages" as ViewMode, icon: MessageSquare, label: "Messages" },
+              { mode: "messages" as ViewMode, icon: MessageSquare, label: "Msgs" },
             ].map(({ mode, icon: Icon, label }) => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
-                className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
                   viewMode === mode
                     ? "bg-white text-gray-900 shadow-sm"
                     : "text-gray-400 hover:text-gray-600"
                 }`}
               >
-                <Icon size={16} />
+                <Icon size={14} className="sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline">{label}</span>
               </button>
             ))}
           </div>
 
           {/* Right side: Search + Notifications + Projects + User + Sign out */}
-          <div className="flex items-center gap-1.5 sm:gap-3">
+          <div className="flex items-center gap-1 sm:gap-2 lg:gap-3">
             {/* Search */}
             <button
               onClick={() => setShowSearch(true)}
-              className="flex items-center gap-1.5 px-2 sm:px-3 py-2 bg-gray-50 rounded-xl text-sm font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              className="p-2 sm:px-3 sm:py-2 bg-gray-50 rounded-xl text-sm font-medium text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors flex items-center gap-1.5"
               title="Search (⌘K)"
             >
               <Search size={15} />
@@ -189,10 +189,11 @@ function AppShell() {
             {/* Projects */}
             <button
               onClick={() => setShowProjectManager(true)}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-gray-50 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+              className="p-2 sm:px-3 sm:py-2 bg-gray-50 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1.5"
+              title="Projects"
             >
               <FolderOpen size={15} />
-              <span className="hidden sm:inline">Projects</span>
+              <span className="hidden md:inline">Projects</span>
             </button>
 
             <span className="hidden lg:inline text-sm font-bold text-gray-600">
@@ -200,7 +201,7 @@ function AppShell() {
             </span>
 
             <div
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white font-bold text-xs overflow-hidden"
+              className="w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-white font-bold text-[10px] sm:text-xs overflow-hidden flex-shrink-0"
               style={{ backgroundColor: user.color }}
             >
               {user.avatar_url ? (
@@ -212,7 +213,7 @@ function AppShell() {
 
             <button
               onClick={signOut}
-              className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              className="hidden sm:block p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
               title="Sign out"
             >
               <LogOut size={16} />
