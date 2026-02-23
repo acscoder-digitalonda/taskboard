@@ -149,10 +149,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Race getSession against a timeout to prevent infinite hangs
+        // Race getSession against a timeout to prevent infinite hangs.
+        // 8s gives slow networks a fair chance while still recovering from
+        // stale tokens that cause Supabase to hang indefinitely.
         const sessionResult = await Promise.race([
           supabase.auth.getSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
         ]);
 
         if (cancelled) return;

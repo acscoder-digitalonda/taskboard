@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const { signInWithGoogle } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   async function handleSignIn() {
     try {
@@ -18,6 +20,29 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleClearCache() {
+    setClearing(true);
+    try {
+      await supabase.auth.signOut();
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith("sb-") || key.includes("supabase")) {
+          localStorage.removeItem(key);
+        }
+      }
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith("sb-") || key.includes("supabase")) {
+          sessionStorage.removeItem(key);
+        }
+      }
+    } catch {
+      // Best-effort cleanup
+    }
+    setClearing(false);
+    setError(null);
+    // Force full page reload to reinitialize auth cleanly
+    window.location.reload();
   }
 
   return (
@@ -58,9 +83,18 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="text-xs text-gray-300 text-center mt-6">
-          Only team members with authorized Google accounts can sign in.
-        </p>
+        <div className="text-center mt-6 space-y-2">
+          <p className="text-xs text-gray-300">
+            Only team members with authorized Google accounts can sign in.
+          </p>
+          <button
+            onClick={handleClearCache}
+            disabled={clearing}
+            className="text-xs text-gray-300 hover:text-cyan-600 transition-colors disabled:opacity-50"
+          >
+            {clearing ? "Clearing..." : "Trouble signing in? Clear cache"}
+          </button>
+        </div>
       </div>
     </div>
   );
