@@ -32,15 +32,17 @@ export async function POST(req: NextRequest) {
 
     const supabase = createServerSupabase();
 
-    // Fetch users and projects for LLM context
+    // Fetch users (with roles/descriptions for smart assignment) and projects
     const [usersResult, projectsResult] = await Promise.all([
-      supabase.from("users").select("id, name").neq("role", "agent"),
+      supabase.from("users").select("id, name, role, description").neq("role", "agent"),
       supabase.from("projects").select("id, name"),
     ]);
 
     const users = (usersResult.data || []).map((u) => ({
       id: u.id,
       name: u.name,
+      role: u.role || undefined,
+      description: u.description || undefined,
     }));
 
     const projects = (projectsResult.data || []).map((p) => ({

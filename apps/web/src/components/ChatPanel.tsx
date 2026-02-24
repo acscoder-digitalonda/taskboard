@@ -96,7 +96,7 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
         method: "POST",
         body: JSON.stringify({
           message: text,
-          users: users.map((u) => ({ id: u.id, name: u.name })),
+          users: users.map((u) => ({ id: u.id, name: u.name, role: u.role, description: u.description })),
           projects: projects.map((p) => ({ id: p.id, name: p.name })),
         }),
       });

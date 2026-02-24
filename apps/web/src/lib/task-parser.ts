@@ -29,19 +29,37 @@ export interface ParsedTaskBatch {
  */
 export async function parseTasksWithLLM(
   text: string,
-  users: { id: string; name: string }[],
+  users: { id: string; name: string; role?: string; description?: string }[],
   projects: { id: string; name: string }[]
 ): Promise<ParsedTaskBatch> {
   const today = new Date().toISOString().split("T")[0];
   const dayOfWeek = new Date().toLocaleDateString("en-US", { weekday: "long" });
+
+  // Build team roster with roles and descriptions so the AI can assign
+  // tasks to the right person based on their expertise, not just name matching.
+  const teamRoster = users
+    .map((u) => {
+      let entry = `- ${u.name} (id: ${u.id}, role: ${u.role || "member"})`;
+      if (u.description) entry += ` — ${u.description}`;
+      return entry;
+    })
+    .join("\n");
 
   const systemPrompt = `You are a task parser for a project management app called TaskBoard.
 Given a natural language message, extract one or more structured tasks.
 
 Today is ${dayOfWeek}, ${today}.
 
-Available team members:
-${JSON.stringify(users.map((u) => ({ id: u.id, name: u.name })))}
+## Team Members
+${teamRoster}
+
+## Role Definitions
+- "design" → visual/brand/UI/UX/graphics/illustration/layout work
+- "strategy" → planning/positioning/messaging/research/competitive analysis/content strategy
+- "development" → code/engineering/bugs/features/deployment/API/database
+- "pm" → scheduling/budgets/timelines/coordination/general inquiries
+- "content_writer" → copywriting, blog posts, social media content, editing
+- "member" → general team member (no specific specialty)
 
 Available projects:
 ${JSON.stringify(projects.map((p) => ({ id: p.id, name: p.name })))}
@@ -72,6 +90,15 @@ Rules:
 - Maximum 10 tasks per input
 - Match user names case-insensitively, accept first names, partial names, and nicknames
 - Match project names case-insensitively, accept partial matches
+- IMPORTANT: When assigning tasks, match the task type to the team member's ROLE and DESCRIPTION:
+  - Bug fixes, coding, API work, deployment → assign to "development" role members
+  - Design mockups, UI/UX, branding, graphics → assign to "design" role members
+  - Strategy, research, planning, positioning → assign to "strategy" role members
+  - Scheduling, coordination, budgets, timelines → assign to "pm" role members
+  - Writing, blog posts, content creation → assign to "content_writer" role members
+  - If the user explicitly names an assignee, always respect that — even if the role doesn't match
+  - If no assignee is specified and the task type clearly matches a role, auto-assign to the best-fit team member
+  - If no assignee is specified and the task is generic, leave assignee_id as null
 - For due dates: "today" = today at 5 PM, "tomorrow" = tomorrow at 5 PM, "next week" = 7 days, "Friday" = next Friday at 5 PM, etc.
 - Default priority is 3 (normal) unless urgency words like "urgent", "ASAP", "critical" appear (then 1)
 - Default status is "doing" unless context suggests otherwise ("backlog" for vague ideas, "waiting" if blocked)
@@ -120,7 +147,7 @@ Rules:
  */
 export async function parseTaskWithLLM(
   text: string,
-  users: { id: string; name: string }[],
+  users: { id: string; name: string; role?: string; description?: string }[],
   projects: { id: string; name: string }[]
 ): Promise<ParsedTask> {
   const batch = await parseTasksWithLLM(text, users, projects);
