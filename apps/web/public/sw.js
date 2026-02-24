@@ -48,3 +48,52 @@ self.addEventListener("fetch", (event) => {
   // For all other requests, let the browser handle normally (network only)
   // This ensures API calls and realtime connections are never stale
 });
+
+// ============================================
+// Push Notification Handlers
+// ============================================
+
+// Receive push event from server and show notification
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  try {
+    const payload = event.data.json();
+    const { title, body, link, icon } = payload;
+
+    event.waitUntil(
+      self.registration.showNotification(title || "TaskBoard", {
+        body: body || "",
+        icon: icon || "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        data: { link: link || "/" },
+        tag: "taskboard-notification",
+        renotify: true,
+      })
+    );
+  } catch (err) {
+    console.error("Push event parse error:", err);
+  }
+});
+
+// Handle notification click — focus or open the app
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl = event.notification.data?.link || "/";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      // If the app is already open, focus it and navigate
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin)) {
+          client.focus();
+          client.navigate(targetUrl);
+          return;
+        }
+      }
+      // Otherwise open a new window
+      return self.clients.openWindow(targetUrl);
+    })
+  );
+});

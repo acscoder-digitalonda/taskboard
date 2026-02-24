@@ -5,10 +5,81 @@ import {
   verifyWebhookSecret,
   unauthorizedResponse,
 } from "@/lib/api-auth";
+import { sendPushToUser } from "@/lib/web-push";
+import { NotificationType } from "@/types";
+
+/**
+ * Map notification types to the user_preferences column that controls them.
+ */
+function shouldNotify(
+  type: NotificationType,
+  prefs: Record<string, unknown>
+): boolean {
+  switch (type) {
+    case "task_assigned":
+    case "task_updated":
+    case "task_completed":
+      return prefs.notify_task_assigned !== false;
+    case "mention":
+      return prefs.notify_mentions !== false;
+    case "dm":
+    case "channel_message":
+      return prefs.notify_dm !== false;
+    case "agent_report":
+    case "checkin_due":
+      return prefs.notify_agent_reports !== false;
+    case "email_ingested":
+    case "email_triage":
+      return true; // always deliver email notifications
+    default:
+      return true;
+  }
+}
+
+/**
+ * Check if the current time (in the user's timezone) falls within quiet hours.
+ */
+function isInQuietHours(
+  quietStart: string | null,
+  quietEnd: string | null,
+  timezone: string
+): boolean {
+  if (!quietStart || !quietEnd) return false;
+
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(now);
+    const hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0");
+    const minute = parseInt(parts.find((p) => p.type === "minute")?.value || "0");
+    const nowMinutes = hour * 60 + minute;
+
+    const [startH, startM] = quietStart.split(":").map(Number);
+    const [endH, endM] = quietEnd.split(":").map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+
+    if (startMinutes <= endMinutes) {
+      // Same-day range (e.g., 22:00 - 23:00)
+      return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+    } else {
+      // Overnight range (e.g., 22:00 - 07:00)
+      return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+    }
+  } catch {
+    return false;
+  }
+}
 
 /**
  * POST /api/notifications/send
- * Creates an in-app notification and optionally sends WhatsApp.
+ * Creates an in-app notification and auto-delivers via push + WhatsApp
+ * based on user preferences, quiet hours, and notification type.
  *
  * Body: {
  *   user_id: string,
@@ -18,7 +89,6 @@ import {
  *   link?: string,
  *   reference_id?: string,
  *   reference_type?: string,
- *   send_whatsapp?: boolean,
  * }
  */
 export async function POST(req: NextRequest) {
@@ -38,7 +108,6 @@ export async function POST(req: NextRequest) {
       link,
       reference_id,
       reference_type,
-      send_whatsapp,
     } = payload;
 
     if (!user_id || !type || !title) {
@@ -72,21 +141,52 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Optionally send WhatsApp
-    if (send_whatsapp) {
-      // Fetch user preferences for WhatsApp number
-      const { data: prefs } = await supabase
-        .from("user_preferences")
-        .select("whatsapp_number, whatsapp_enabled")
-        .eq("user_id", user_id)
-        .single();
+    // ── Auto-deliver via push + WhatsApp based on preferences ──
+    const { data: prefs } = await supabase
+      .from("user_preferences")
+      .select("*")
+      .eq("user_id", user_id)
+      .maybeSingle();
 
+    // Check if user wants this notification type
+    const wantsNotification = prefs ? shouldNotify(type, prefs) : true;
+
+    // Check quiet hours
+    const quiet = prefs
+      ? isInQuietHours(
+          prefs.quiet_hours_start,
+          prefs.quiet_hours_end,
+          prefs.timezone || "UTC"
+        )
+      : false;
+
+    if (wantsNotification && !quiet) {
+      // Send Web Push (to all user's devices)
+      try {
+        const pushSent = await sendPushToUser(user_id, {
+          title,
+          body: body || undefined,
+          link: link || undefined,
+        });
+        if (pushSent > 0) {
+          await supabase
+            .from("notifications")
+            .update({
+              channel: "push",
+              delivered_at: new Date().toISOString(),
+            })
+            .eq("id", notif.id);
+        }
+      } catch (pushErr) {
+        console.error("Push delivery failed:", pushErr);
+      }
+
+      // Send WhatsApp if enabled
       if (prefs?.whatsapp_enabled && prefs?.whatsapp_number) {
-        // Call our WhatsApp endpoint
         const whatsappMessage = `📋 TaskBoard: ${title}${body ? `\n${body}` : ""}`;
         try {
           await fetch(
-            `${process.env.NEXT_PUBLIC_SUPABASE_URL ? req.nextUrl.origin : "http://localhost:3000"}/api/notifications/whatsapp`,
+            `${req.nextUrl.origin}/api/notifications/whatsapp`,
             {
               method: "POST",
               headers: {
@@ -100,17 +200,18 @@ export async function POST(req: NextRequest) {
             }
           );
 
-          // Update notification as delivered
-          await supabase
-            .from("notifications")
-            .update({
-              channel: "whatsapp",
-              delivered_at: new Date().toISOString(),
-            })
-            .eq("id", notif.id);
+          // If push didn't deliver, mark as whatsapp
+          if (notif.channel === "in_app") {
+            await supabase
+              .from("notifications")
+              .update({
+                channel: "whatsapp",
+                delivered_at: new Date().toISOString(),
+              })
+              .eq("id", notif.id);
+          }
         } catch (whatsappErr) {
           console.error("WhatsApp delivery failed:", whatsappErr);
-          // Don't fail the whole request — in-app notif was still created
         }
       }
     }

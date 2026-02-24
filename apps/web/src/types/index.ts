@@ -186,7 +186,7 @@ export type NotificationType =
   | "email_ingested"
   | "email_triage";
 
-export type NotificationChannel = "in_app" | "whatsapp" | "email";
+export type NotificationChannel = "in_app" | "whatsapp" | "email" | "push";
 
 export interface Notification {
   id: string;
@@ -234,6 +234,19 @@ export interface AgentActivity {
   project_id: string | null;
   channel_id: string | null;
   metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+// ============================================
+// Push Subscription Types
+// ============================================
+
+export interface PushSubscriptionRecord {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
   created_at: string;
 }
 

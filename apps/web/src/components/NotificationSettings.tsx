@@ -5,6 +5,13 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { UserPreferences } from "@/types";
 import {
+  isPushSupported,
+  getPushPermission,
+  subscribeToPush,
+  unsubscribeFromPush,
+  hasActivePushSubscription,
+} from "@/lib/push";
+import {
   ArrowLeft,
   Save,
   CheckCircle2,
@@ -12,6 +19,7 @@ import {
   Bell,
   Moon,
   Globe,
+  BellRing,
 } from "lucide-react";
 
 const COMMON_TIMEZONES = [
@@ -51,13 +59,19 @@ interface NotificationSettingsProps {
 }
 
 export default function NotificationSettings({ onBack }: NotificationSettingsProps) {
-  const { currentUser } = useAuth();
+  const { currentUser, session } = useAuth();
   const userId = currentUser?.id;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Push notification state
+  const [pushSupported] = useState(() => isPushSupported());
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [pushToggling, setPushToggling] = useState(false);
 
   // Form state
   const [whatsappNumber, setWhatsappNumber] = useState("");
@@ -119,7 +133,13 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
     }
 
     loadPrefs();
-  }, [userId]);
+
+    // Check push subscription state
+    if (pushSupported) {
+      setPushPermission(getPushPermission());
+      hasActivePushSubscription().then(setPushEnabled);
+    }
+  }, [userId, pushSupported]);
 
   const hasChanges = original
     ? whatsappNumber !== (original.whatsapp_number || "") ||
@@ -132,6 +152,26 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
       quietEnd !== (original.quiet_hours_end || "") ||
       timezone !== original.timezone
     : false;
+
+  async function handlePushToggle() {
+    if (!session?.access_token) return;
+    setPushToggling(true);
+    try {
+      if (pushEnabled) {
+        await unsubscribeFromPush(session.access_token);
+        setPushEnabled(false);
+      } else {
+        const ok = await subscribeToPush(session.access_token);
+        setPushEnabled(ok);
+        if (!ok) {
+          setPushPermission(getPushPermission());
+        }
+      }
+    } finally {
+      setPushToggling(false);
+      setPushPermission(getPushPermission());
+    }
+  }
 
   async function handleSave() {
     if (!userId) return;
@@ -215,6 +255,57 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
 
       <div className="max-h-[420px] overflow-y-auto">
         <div className="px-4 py-4 space-y-5">
+          {/* Push Notifications Section */}
+          {pushSupported && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <BellRing size={14} className="text-cyan-500" />
+                <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                  Push Notifications
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center justify-between cursor-pointer group">
+                  <div>
+                    <span className="text-sm text-gray-700 font-medium">
+                      {pushToggling ? "Updating..." : "Enable push notifications"}
+                    </span>
+                    {pushPermission === "denied" && (
+                      <p className="text-[10px] text-red-400 mt-0.5">
+                        Blocked by browser — enable in site settings
+                      </p>
+                    )}
+                    {pushEnabled && pushPermission === "granted" && (
+                      <p className="text-[10px] text-green-500 mt-0.5">
+                        Active on this device
+                      </p>
+                    )}
+                  </div>
+                  <div
+                    className={`relative w-10 h-5.5 rounded-full transition-colors ${
+                      pushEnabled ? "bg-cyan-500" : "bg-gray-300"
+                    } ${pushToggling || pushPermission === "denied" ? "opacity-50" : ""}`}
+                    onClick={() => {
+                      if (!pushToggling && pushPermission !== "denied") {
+                        handlePushToggle();
+                      }
+                    }}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform ${
+                        pushEnabled ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </div>
+                </label>
+                <p className="text-[10px] text-gray-400">
+                  Get notified on this device when tasks are assigned to you
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* WhatsApp Section */}
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -348,7 +439,7 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
               </div>
             </div>
             <p className="text-[10px] text-gray-400 mt-1">
-              No WhatsApp notifications during quiet hours
+              No push or WhatsApp notifications during quiet hours
             </p>
           </div>
 
