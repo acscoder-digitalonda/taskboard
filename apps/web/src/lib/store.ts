@@ -119,9 +119,12 @@ async function fetchProjects(): Promise<Project[]> {
 }
 
 async function fetchUsers(): Promise<User[]> {
+  // Exclude "agent" role users — they are system/automation users
+  // and should not appear in assignee dropdowns or filter chips.
   const { data, error } = await supabase
     .from("users")
     .select("*")
+    .neq("role", "agent")
     .order("created_at", { ascending: true });
 
   if (error) {
