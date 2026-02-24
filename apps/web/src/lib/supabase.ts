@@ -16,7 +16,13 @@ function createSupabaseClient(): SupabaseClient {
     );
     return createClient("https://placeholder.supabase.co", "placeholder");
   }
-  return createClient(supabaseUrl, supabaseAnonKey);
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
 }
 
 export const supabase = createSupabaseClient();

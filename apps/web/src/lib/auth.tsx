@@ -247,9 +247,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
+    // Proactively refresh session when user returns to the app (e.g., opening
+    // PWA after hours/days away). This prevents stale access tokens from causing
+    // a logout — the SDK refreshes using the stored refresh token.
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible" && !cancelled) {
+        supabase.auth.getSession().then(({ data: { session: freshSession } }) => {
+          if (freshSession && !cancelled) {
+            setSession(freshSession);
+          }
+        }).catch(() => {
+          // Silent — the onAuthStateChange listener will handle sign-out if needed
+        });
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       cancelled = true;
       subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
