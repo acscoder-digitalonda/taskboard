@@ -6,8 +6,8 @@
  * the "What's New" section so users can see recent updates.
  */
 
-export const APP_VERSION = "1.7.0";
-export const APP_BUILD_DATE = "2026-02-23";
+export const APP_VERSION = "1.8.0";
+export const APP_BUILD_DATE = "2026-02-24";
 
 export interface ChangelogEntry {
   version: string;
@@ -17,6 +17,19 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.8.0",
+    date: "2026-02-24",
+    title: "PWA push notifications",
+    items: [
+      "Push notifications \u2014 get native alerts when tasks are assigned to you",
+      "Enable/disable push per device in Notification Settings",
+      "Auto-delivery \u2014 push + WhatsApp based on your preferences",
+      "Quiet hours respected for push and WhatsApp",
+      "Task reassignment now triggers notifications",
+      "External API + email inbound now trigger push notifications",
+    ],
+  },
   {
     version: "1.7.0",
     date: "2026-02-23",
