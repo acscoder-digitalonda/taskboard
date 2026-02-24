@@ -89,7 +89,10 @@ export async function POST(req: NextRequest) {
             `${process.env.NEXT_PUBLIC_SUPABASE_URL ? req.nextUrl.origin : "http://localhost:3000"}/api/notifications/whatsapp`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                "X-Webhook-Secret": process.env.WEBHOOK_SECRET || "",
+              },
               body: JSON.stringify({
                 to: prefs.whatsapp_number,
                 message: whatsappMessage,
