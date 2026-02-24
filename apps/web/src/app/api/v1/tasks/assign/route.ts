@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
             link: `/tasks/${task.id}`,
             reference_id: task.id,
             reference_type: "task",
+            priority: task.priority,
           }),
         });
       } catch (notifErr) {

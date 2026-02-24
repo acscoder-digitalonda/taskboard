@@ -329,7 +329,7 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-200 focus:border-cyan-300 focus:outline-none transition-colors"
                 />
                 <p className="text-[10px] text-gray-400 mt-1">
-                  International format with country code
+                  International format with country code. WhatsApp alerts for urgent (P1) tasks only.
                 </p>
               </div>
 

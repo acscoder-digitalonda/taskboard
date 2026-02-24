@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
             link: `/tasks/${task.id}`,
             reference_id: task.id,
             reference_type: "task",
+            priority: taskInput.priority || undefined,
           }),
         });
         notifiedUsers.add(taskInput.assignee_id);

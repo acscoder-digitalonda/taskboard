@@ -8,6 +8,7 @@ export interface User {
   color: string;
   initials: string;
   email?: string;
+  phone?: string;
   avatar_url?: string;
   role?: UserRole;
   description?: string;

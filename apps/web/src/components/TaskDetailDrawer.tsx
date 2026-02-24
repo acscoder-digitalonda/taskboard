@@ -474,6 +474,7 @@ export default function TaskDetailDrawer({
                         link: `/tasks/${task.id}`,
                         reference_id: task.id,
                         reference_type: "task",
+                        priority: task.priority,
                       }),
                     }).catch(() => {});
                   }

@@ -518,6 +518,7 @@ export async function POST(req: NextRequest) {
               link: channelId ? `/messages/${channelId}` : null,
               reference_id: draftId,
               reference_type: "email_draft",
+              priority: triageResult!.task_priority || undefined,
             })
           )
         );
@@ -540,6 +541,7 @@ export async function POST(req: NextRequest) {
           link: `/tasks/${taskId}`,
           reference_id: taskId,
           reference_type: "task",
+          priority: triageResult.task_priority || undefined,
         });
       }
     } else {

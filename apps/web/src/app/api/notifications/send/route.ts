@@ -89,6 +89,7 @@ function isInQuietHours(
  *   link?: string,
  *   reference_id?: string,
  *   reference_type?: string,
+ *   priority?: number,  // 1=urgent → triggers WhatsApp; 2-4 or omitted → push only
  * }
  */
 export async function POST(req: NextRequest) {
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
       link,
       reference_id,
       reference_type,
+      priority,
     } = payload;
 
     if (!user_id || !type || !title) {
@@ -181,8 +183,8 @@ export async function POST(req: NextRequest) {
         console.error("Push delivery failed:", pushErr);
       }
 
-      // Send WhatsApp if enabled
-      if (prefs?.whatsapp_enabled && prefs?.whatsapp_number) {
+      // Send WhatsApp only for urgent (P1) tasks
+      if (prefs?.whatsapp_enabled && prefs?.whatsapp_number && priority === 1) {
         const whatsappMessage = `📋 TaskBoard: ${title}${body ? `\n${body}` : ""}`;
         try {
           await fetch(

@@ -6,7 +6,7 @@
  * the "What's New" section so users can see recent updates.
  */
 
-export const APP_VERSION = "1.8.0";
+export const APP_VERSION = "1.8.1";
 export const APP_BUILD_DATE = "2026-02-24";
 
 export interface ChangelogEntry {
@@ -17,6 +17,16 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.8.1",
+    date: "2026-02-24",
+    title: "Smart WhatsApp alerts",
+    items: [
+      "WhatsApp reserved for urgent (P1) tasks only — high-signal channel",
+      "All other notifications delivered via push in the PWA",
+      "Added phone field to user profile",
+    ],
+  },
   {
     version: "1.8.0",
     date: "2026-02-24",
