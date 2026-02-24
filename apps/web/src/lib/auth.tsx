@@ -169,6 +169,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let authResolved = false; // Track whether auth has been definitively resolved
+
+    function resolveAuth() {
+      if (!authResolved && !cancelled) {
+        authResolved = true;
+        setIsLoading(false);
+      }
+    }
 
     async function initAuth() {
       try {
@@ -177,15 +185,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (DEV_BYPASS_AUTH) {
           const user = await fetchDevBypassUser();
           if (!cancelled) setCurrentUser(user);
+          resolveAuth();
           return;
         }
 
-        // Race getSession against a timeout to prevent infinite hangs.
-        // 12s gives slow networks a fair chance while still recovering from
-        // stale tokens that cause Supabase to hang indefinitely.
+        // Try getSession first — this restores from localStorage.
+        // Race against a timeout so we don't hang forever on stale tokens.
         const sessionResult = await Promise.race([
           supabase.auth.getSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
         ]);
 
         if (cancelled) return;
@@ -201,13 +209,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setCurrentUser(user);
             setAuthError(null);
           }
+          resolveAuth();
         } else if (sessionResult === null) {
-          // Timeout — don't set session to null yet; let onAuthStateChange
-          // decide. Just stop the loading spinner so the UI isn't stuck.
-          console.warn("getSession timed out — waiting for auth state listener");
+          // getSession timed out — DON'T resolve yet. The onAuthStateChange
+          // listener below will fire if there's a valid stored token. We use a
+          // secondary fallback timeout (3s) in case the listener never fires.
+          console.warn("getSession timed out — waiting for onAuthStateChange");
+          setTimeout(() => {
+            if (!authResolved && !cancelled) {
+              console.warn("Auth fallback: no session after timeout, showing login");
+              resolveAuth();
+            }
+          }, 3000);
         } else {
           // Genuine null session — no user is logged in
           setSession(null);
+          resolveAuth();
         }
       } catch (err) {
         console.error("Auth init failed:", err);
@@ -216,8 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setCurrentUser(null);
           setSession(null);
         }
-      } finally {
-        if (!cancelled) setIsLoading(false);
+        resolveAuth();
       }
     }
 
@@ -229,6 +245,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => { cancelled = true; };
     }
 
+    // onAuthStateChange fires when Supabase SDK restores session from storage
+    // or when a new sign-in/sign-out occurs. This is the definitive source.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (cancelled) return;
@@ -251,7 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setCurrentUser(null);
         }
-        if (!cancelled) setIsLoading(false);
+        resolveAuth();
       }
     );
 
@@ -271,10 +289,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
+    // Ultimate fallback: if nothing resolves auth within 15s, stop loading
+    // to avoid infinite spinner. User will see login page.
+    const ultimateTimeout = setTimeout(() => {
+      if (!authResolved && !cancelled) {
+        console.warn("Auth ultimate timeout — showing login");
+        resolveAuth();
+      }
+    }, 15000);
+
     return () => {
       cancelled = true;
       subscription.unsubscribe();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearTimeout(ultimateTimeout);
     };
   }, []);
 
