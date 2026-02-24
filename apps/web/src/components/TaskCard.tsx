@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { Task, TaskStatus } from "@/types";
 import { getUserById, getProjectById, formatDue, isOverdue } from "@/lib/utils";
+import { useTaskGroupProgress } from "@/lib/hooks";
 import { store } from "@/lib/store";
 import {
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   ExternalLink,
   GripVertical,
   StickyNote,
+  Layers,
 } from "lucide-react";
 
 interface TaskCardProps {
@@ -35,6 +37,7 @@ function TaskCard({
   const project = getProjectById(task.project_id);
   const due = formatDue(task.due_at);
   const overdue = isOverdue(task.due_at);
+  const groupProgress = useTaskGroupProgress(task.group_id);
 
   return (
     <div
@@ -120,6 +123,20 @@ function TaskCard({
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700">
                 <StickyNote size={10} />
                 {task.notes.length}
+              </span>
+            )}
+
+            {groupProgress && (
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  groupProgress.allDone
+                    ? "bg-green-50 text-green-700"
+                    : "bg-cyan-50 text-cyan-700"
+                }`}
+                title={`Task group: ${groupProgress.done}/${groupProgress.total} done`}
+              >
+                <Layers size={10} />
+                {groupProgress.done}/{groupProgress.total}
               </span>
             )}
           </div>

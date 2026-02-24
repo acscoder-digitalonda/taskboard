@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, useCallback, useState } from "react";
+import { useSyncExternalStore, useCallback, useState, useMemo } from "react";
 import { store } from "./store";
 import { Task, TaskStatus } from "@/types";
 
@@ -72,6 +72,40 @@ export function useProjects() {
     updateProject: store.updateProject,
     deleteProject: store.deleteProject,
   };
+}
+
+export function useTaskGroups() {
+  const groups = useSyncExternalStore(store.subscribeGroups, store.getTaskGroups, store.getTaskGroups);
+  return {
+    groups,
+    addTaskGroup: store.addTaskGroup,
+  };
+}
+
+export function useTaskGroupProgress(groupId: string | undefined) {
+  const { tasks } = useTasks();
+  const groups = useSyncExternalStore(store.subscribeGroups, store.getTaskGroups, store.getTaskGroups);
+
+  return useMemo(() => {
+    if (!groupId) return null;
+
+    const group = groups.find((g) => g.id === groupId);
+    const groupTasks = tasks.filter((t) => t.group_id === groupId);
+    const total = groupTasks.length;
+    const done = groupTasks.filter((t) => t.status === "done").length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+    // Don't show badge for single-task groups
+    if (total <= 1) return null;
+
+    return {
+      total,
+      done,
+      percent,
+      allDone: done === total && total > 0,
+      originalInput: group?.original_input || "",
+    };
+  }, [groupId, tasks, groups]);
 }
 
 // L6: Removed unused useViewMode hook

@@ -3,7 +3,7 @@ import {
   getAuthenticatedUserId,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { parseTaskWithLLM } from "@/lib/task-parser";
+import { parseTasksWithLLM } from "@/lib/task-parser";
 
 export async function POST(req: NextRequest) {
   // Auth check (same pattern as email/drafts/route.ts)
@@ -16,13 +16,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const parsed = await parseTaskWithLLM(
+    const batch = await parseTasksWithLLM(
       message,
       users || [],
       projects || []
     );
 
-    return NextResponse.json({ success: true, parsed });
+    return NextResponse.json({
+      success: true,
+      parsed: batch.tasks,
+      confidence: batch.confidence,
+    });
   } catch (error) {
     console.error("Claude API error:", error);
     const errorMessage =

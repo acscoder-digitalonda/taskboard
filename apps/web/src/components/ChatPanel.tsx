@@ -20,6 +20,7 @@ import {
   BellOff,
   Loader2,
   Sparkles,
+  Layers,
 } from "lucide-react";
 
 type NotifyLevel = "in_app" | "whatsapp" | "none";
@@ -28,7 +29,7 @@ interface ChatMessage {
   id: string;
   role: "user" | "bot";
   text: string;
-  taskPreview?: Partial<Task>;
+  taskPreviews?: Partial<Task>[];
   isThinking?: boolean;
 }
 
@@ -44,15 +45,15 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
     {
       id: "welcome",
       role: "bot",
-      text: "Hey! Type a task and I'll create it. Try: \"Draft proposal for ACME, assign to Katie, due tomorrow, project Partnerships\"",
+      text: "Hey! Type a task and I'll create it. Try: \"Review deck, draft proposal, and schedule meeting with Katie — assign to An, due tomorrow\"",
     },
   ]);
   const [input, setInput] = useState("");
-  const [pendingTask, setPendingTask] = useState<Partial<Task> | null>(null);
+  const [pendingTasks, setPendingTasks] = useState<Partial<Task>[]>([]);
+  const [originalInput, setOriginalInput] = useState("");
   const [notifyLevel, setNotifyLevel] = useState<NotifyLevel>("in_app");
   const [isCreating, setIsCreating] = useState(false);
   const [aiParsing, setAiParsing] = useState(false);
-  // Use prop if provided, otherwise track internally
   const [aiConnectedLocal, setAiConnectedLocal] = useState<boolean | null>(null);
   const aiConnected = aiConnectedProp ?? aiConnectedLocal;
   const [isOpen, setIsOpen] = useState(true);
@@ -62,6 +63,11 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Check if any pending task is assigned to someone else
+  const hasCrossAssignment = pendingTasks.some(
+    (t) => t.assignee_id && t.assignee_id !== currentUserId
+  );
 
   async function handleSend() {
     if (!input.trim() || aiParsing) return;
@@ -100,13 +106,19 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
 
       if (data.success && data.parsed) {
         setAiConnectedLocal(true);
-        const parsed = data.parsed;
-        // Apply defaults
-        if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
-        if (!parsed.status) parsed.status = "doing";
-        if (!parsed.priority) parsed.priority = 3;
+        const parsedArray: Partial<Task>[] = Array.isArray(data.parsed)
+          ? data.parsed
+          : [data.parsed];
 
-        const confidence = parsed.confidence ?? 0;
+        // Apply defaults to each task
+        const tasks = parsedArray.map((p: Partial<Task>) => ({
+          ...p,
+          assignee_id: p.assignee_id || currentUserId,
+          status: p.status || "doing",
+          priority: p.priority || 3,
+        }));
+
+        const confidence = data.confidence ?? 0;
         const confidenceLabel =
           confidence >= 0.8
             ? "High confidence"
@@ -114,19 +126,24 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
               ? "Medium confidence"
               : "Low confidence";
 
+        const taskLabel = tasks.length === 1
+          ? "Here's what I've got"
+          : `I found ${tasks.length} tasks`;
+
         const botMsg: ChatMessage = {
           id: "bot-" + Date.now(),
           role: "bot",
-          text: `✨ Here's what I've got (${confidenceLabel}):`,
-          taskPreview: parsed,
+          text: `✨ ${taskLabel} (${confidenceLabel}):`,
+          taskPreviews: tasks,
         };
 
         setMessages((prev) =>
           prev.filter((m) => m.id !== thinkingId).concat(botMsg)
         );
-        setPendingTask(parsed);
+        setPendingTasks(tasks);
+        setOriginalInput(text);
         setNotifyLevel(
-          parsed.assignee_id !== currentUserId ? "whatsapp" : "in_app"
+          tasks.some((t: Partial<Task>) => t.assignee_id !== currentUserId) ? "whatsapp" : "in_app"
         );
       } else {
         throw new Error("Parse failed");
@@ -143,13 +160,14 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
         id: "bot-" + Date.now(),
         role: "bot",
         text: "Here's what I've got (basic parsing — AI unavailable):",
-        taskPreview: parsed,
+        taskPreviews: [parsed],
       };
 
       setMessages((prev) =>
         prev.filter((m) => m.id !== thinkingId).concat(botMsg)
       );
-      setPendingTask(parsed);
+      setPendingTasks([parsed]);
+      setOriginalInput(text);
       setNotifyLevel(
         parsed.assignee_id !== currentUserId ? "whatsapp" : "in_app"
       );
@@ -159,61 +177,86 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
   }
 
   async function handleCreate() {
-    if (!pendingTask || isCreating) return;
+    if (pendingTasks.length === 0 || isCreating) return;
     setIsCreating(true);
 
-    const task = store.addTask({
-      title: pendingTask.title || "Untitled task",
-      assignee_id: pendingTask.assignee_id || currentUserId,
-      project_id: pendingTask.project_id,
-      status: (pendingTask.status as TaskStatus) || "doing",
-      priority: pendingTask.priority || 2,
-      due_at: pendingTask.due_at,
-      created_by_id: currentUserId,
-      created_via: "app_chat",
-      drive_links: pendingTask.drive_links || [],
-      notes: pendingTask.notes || [],
-      sections: pendingTask.sections || [],
-      checkin_target_id: pendingTask.checkin_target_id,
-    });
+    // Create group if multiple tasks
+    let groupId: string | undefined;
+    if (pendingTasks.length > 1) {
+      const group = store.addTaskGroup(
+        originalInput,
+        currentUserId,
+        "app_chat",
+        pendingTasks.length
+      );
+      groupId = group.id;
+    }
 
-    const assignee = getUserById(task.assignee_id);
-    const assigneeName = assignee?.name || "Unknown";
+    // Create each task
+    const createdTasks: Task[] = [];
+    for (const pt of pendingTasks) {
+      const task = store.addTask({
+        title: pt.title || "Untitled task",
+        assignee_id: pt.assignee_id || currentUserId,
+        project_id: pt.project_id,
+        status: (pt.status as TaskStatus) || "doing",
+        priority: pt.priority || 2,
+        due_at: pt.due_at,
+        created_by_id: currentUserId,
+        created_via: "app_chat",
+        drive_links: pt.drive_links || [],
+        notes: pt.notes || [],
+        sections: pt.sections || [],
+        checkin_target_id: pt.checkin_target_id,
+        group_id: groupId,
+      });
+      createdTasks.push(task);
+    }
 
-    // Send notification based on selected level
-    if (notifyLevel !== "none" && task.assignee_id !== currentUserId) {
-      try {
-        await apiFetch("/api/notifications/send", {
-          method: "POST",
-          body: JSON.stringify({
-            user_id: task.assignee_id,
-            type: "task_assigned",
-            title: `New task from ${getUserById(currentUserId)?.name || "someone"}`,
-            body: task.title,
-            link: `/tasks/${task.id}`,
-            reference_id: task.id,
-            reference_type: "task",
-            priority: task.priority,
-          }),
-        });
-      } catch (err) {
-        console.error("Failed to send notification:", err);
+    // Send notifications for cross-assigned tasks
+    if (notifyLevel !== "none") {
+      const crossAssigned = createdTasks.filter(
+        (t) => t.assignee_id !== currentUserId
+      );
+      for (const task of crossAssigned) {
+        try {
+          await apiFetch("/api/notifications/send", {
+            method: "POST",
+            body: JSON.stringify({
+              user_id: task.assignee_id,
+              type: "task_assigned",
+              title: `New task from ${getUserById(currentUserId)?.name || "someone"}`,
+              body: task.title,
+              link: `/tasks/${task.id}`,
+              reference_id: task.id,
+              reference_type: "task",
+              priority: task.priority,
+            }),
+          });
+        } catch (err) {
+          console.error("Failed to send notification:", err);
+        }
       }
     }
 
+    // Build confirmation message
     let notifyLabel = "";
     if (notifyLevel === "whatsapp") notifyLabel = " 📱 WhatsApp notified.";
-    else if (notifyLevel === "in_app")
-      notifyLabel = " 🔔 In-app notification sent.";
+    else if (notifyLevel === "in_app") notifyLabel = " 🔔 Notification sent.";
+
+    const confirmText = createdTasks.length === 1
+      ? `✅ Created "${createdTasks[0].title}" and assigned to ${getUserById(createdTasks[0].assignee_id)?.name || "Unknown"}.${notifyLabel} Ready for another!`
+      : `✅ Created ${createdTasks.length} tasks.${notifyLabel} Ready for another!`;
 
     const confirmMsg: ChatMessage = {
       id: "confirm-" + Date.now(),
       role: "bot",
-      text: `✅ Created "${task.title}" and assigned to ${assigneeName}.${notifyLabel} Ready for another!`,
+      text: confirmText,
     };
 
     setMessages((prev) => [...prev, confirmMsg]);
-    setPendingTask(null);
+    setPendingTasks([]);
+    setOriginalInput("");
     setIsCreating(false);
   }
 
@@ -224,7 +267,8 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
       text: "Cancelled. Type another task whenever you're ready.",
     };
     setMessages((prev) => [...prev, cancelMsg]);
-    setPendingTask(null);
+    setPendingTasks([]);
+    setOriginalInput("");
   }
 
   return (
@@ -290,61 +334,81 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                 >
                   <p className="text-sm">{msg.text}</p>
 
-                  {/* Task preview card */}
-                  {msg.taskPreview && (
-                    <div className="mt-3 p-3 bg-white rounded-xl border border-gray-200 space-y-2">
-                      <p className="font-bold text-sm text-gray-900">
-                        {msg.taskPreview.title}
-                      </p>
+                  {/* Multi-task preview cards */}
+                  {msg.taskPreviews && msg.taskPreviews.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {msg.taskPreviews.map((preview, idx) => (
+                        <div
+                          key={idx}
+                          className="p-3 bg-white rounded-xl border border-gray-200 space-y-2"
+                        >
+                          <div className="flex items-start gap-2">
+                            {/* Index badge for multi-task */}
+                            {msg.taskPreviews!.length > 1 && (
+                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-cyan-500 text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
+                                {idx + 1}
+                              </span>
+                            )}
+                            <p className="font-bold text-sm text-gray-900 flex-1">
+                              {preview.title}
+                            </p>
+                          </div>
 
-                      <div className="flex flex-wrap gap-1.5">
-                        {msg.taskPreview.assignee_id && (
-                          <span
-                            className="px-2 py-0.5 rounded-full text-xs font-bold text-white"
-                            style={{
-                              backgroundColor:
-                                getUserById(msg.taskPreview.assignee_id)
-                                  ?.color || "#999",
-                            }}
-                          >
-                            {getUserById(msg.taskPreview.assignee_id)?.name}
-                          </span>
-                        )}
-                        {msg.taskPreview.project_id && (
-                          <span
-                            className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                            style={{
-                              backgroundColor:
-                                (getProjectById(msg.taskPreview.project_id)
-                                  ?.color || "#999") + "20",
-                              color:
-                                getProjectById(msg.taskPreview.project_id)
-                                  ?.color || "#999",
-                            }}
-                          >
-                            {getProjectById(msg.taskPreview.project_id)?.name}
-                          </span>
-                        )}
-                        {msg.taskPreview.due_at && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
-                            Due:{" "}
-                            {new Date(
-                              msg.taskPreview.due_at
-                            ).toLocaleDateString()}
-                          </span>
-                        )}
-                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-100 text-cyan-700">
-                          {msg.taskPreview.status || "doing"}
-                        </span>
-                      </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {preview.assignee_id && (
+                              <span
+                                className="px-2 py-0.5 rounded-full text-xs font-bold text-white"
+                                style={{
+                                  backgroundColor:
+                                    getUserById(preview.assignee_id)?.color || "#999",
+                                }}
+                              >
+                                {getUserById(preview.assignee_id)?.name}
+                              </span>
+                            )}
+                            {preview.project_id && (
+                              <span
+                                className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                                style={{
+                                  backgroundColor:
+                                    (getProjectById(preview.project_id)?.color || "#999") + "20",
+                                  color:
+                                    getProjectById(preview.project_id)?.color || "#999",
+                                }}
+                              >
+                                {getProjectById(preview.project_id)?.name}
+                              </span>
+                            )}
+                            {preview.due_at && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                                Due: {new Date(preview.due_at).toLocaleDateString()}
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-cyan-100 text-cyan-700">
+                              {preview.status || "doing"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
 
-                      {pendingTask && (
-                        <>
+                      {/* Action bar — shown once below all previews */}
+                      {pendingTasks.length > 0 && (
+                        <div className="p-3 bg-white rounded-xl border border-gray-200 space-y-2">
+                          {/* Group badge for multi-task */}
+                          {pendingTasks.length > 1 && (
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                              <Layers size={10} className="text-cyan-500" />
+                              <span className="font-medium">
+                                {pendingTasks.length} tasks will be grouped together
+                              </span>
+                            </div>
+                          )}
+
                           {/* Notification level selector */}
-                          {pendingTask.assignee_id !== currentUserId && (
+                          {hasCrossAssignment && (
                             <div className="pt-2 border-t border-gray-100">
                               <p className="text-xs font-semibold text-gray-500 mb-1.5">
-                                Notify assignee:
+                                Notify assignees:
                               </p>
                               <div className="flex gap-1">
                                 {(
@@ -353,22 +417,19 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                                       level: "whatsapp" as NotifyLevel,
                                       icon: Phone,
                                       label: "WhatsApp",
-                                      color:
-                                        "bg-green-50 text-green-700 border-green-200",
+                                      color: "bg-green-50 text-green-700 border-green-200",
                                     },
                                     {
                                       level: "in_app" as NotifyLevel,
                                       icon: Bell,
                                       label: "In-app",
-                                      color:
-                                        "bg-cyan-50 text-cyan-700 border-cyan-200",
+                                      color: "bg-cyan-50 text-cyan-700 border-cyan-200",
                                     },
                                     {
                                       level: "none" as NotifyLevel,
                                       icon: BellOff,
                                       label: "None",
-                                      color:
-                                        "bg-gray-50 text-gray-500 border-gray-200",
+                                      color: "bg-gray-50 text-gray-500 border-gray-200",
                                     },
                                   ] as const
                                 ).map(({ level, icon: Icon, label, color }) => (
@@ -396,7 +457,11 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                               className="flex items-center gap-1 px-3 py-1.5 bg-cyan-500 text-white text-xs font-bold rounded-lg hover:bg-cyan-600 disabled:opacity-50 transition-colors"
                             >
                               <Check size={12} />
-                              {isCreating ? "Creating..." : "Create"}
+                              {isCreating
+                                ? "Creating..."
+                                : pendingTasks.length === 1
+                                  ? "Create"
+                                  : `Create ${pendingTasks.length} tasks`}
                             </button>
                             <button
                               onClick={handleCancel}
@@ -406,7 +471,7 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                               Cancel
                             </button>
                           </div>
-                        </>
+                        </div>
                       )}
                     </div>
                   )}
@@ -431,7 +496,7 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Type a task... e.g. &quot;Review deck, assign to An, due tomorrow&quot;"
+                placeholder="Type a task... e.g. &quot;Review deck, draft proposal, schedule meeting&quot;"
                 className="flex-1 px-4 py-2.5 bg-gray-50 rounded-xl text-sm border border-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-300 transition-all"
                 disabled={aiParsing}
               />

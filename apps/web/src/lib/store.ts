@@ -1,6 +1,6 @@
 "use client";
 
-import { Task, TaskStatus, Project, TaskSection, User, UserRole } from "@/types";
+import { Task, TaskStatus, Project, TaskSection, User, UserRole, TaskGroup } from "@/types";
 import { supabase } from "./supabase";
 import { deleteProjectFiles } from "./files";
 import { ACCENT_COLORS } from "./utils";
@@ -11,11 +11,13 @@ type ErrorListener = (message: string) => void;
 let tasks: Task[] = [];
 let projects: Project[] = [];
 let users: User[] = [];
+let taskGroups: TaskGroup[] = [];
 let initialized = false;
 let initializing = false;
 const taskListeners: Set<Listener> = new Set();
 const projectListeners: Set<Listener> = new Set();
 const userListeners: Set<Listener> = new Set();
+const groupListeners: Set<Listener> = new Set();
 
 // C4: Error notification system for failed mutations
 const errorListeners: Set<ErrorListener> = new Set();
@@ -39,6 +41,10 @@ function emitProjects() {
 
 function emitUsers() {
   userListeners.forEach((fn) => fn());
+}
+
+function emitGroups() {
+  groupListeners.forEach((fn) => fn());
 }
 
 // ---- Supabase data fetching ----
@@ -88,6 +94,7 @@ async function fetchTasks(): Promise<Task[]> {
     sort_order: t.sort_order || 0,
     email_draft_id: t.email_draft_id || undefined,
     source_email_id: t.source_email_id || undefined,
+    group_id: t.group_id || undefined,
     created_at: t.created_at,
     updated_at: t.updated_at,
   }));
@@ -134,6 +141,31 @@ async function fetchUsers(): Promise<User[]> {
   }));
 }
 
+async function fetchTaskGroups(): Promise<TaskGroup[]> {
+  const { data, error } = await supabase
+    .from("task_groups")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    // Table may not exist yet — silently return empty
+    if (error.code === "42P01" || error.message?.includes("does not exist")) {
+      return taskGroups;
+    }
+    console.error("Error fetching task groups:", error);
+    return taskGroups;
+  }
+
+  return (data || []).map((g) => ({
+    id: g.id,
+    original_input: g.original_input,
+    created_by_id: g.created_by_id,
+    created_via: g.created_via,
+    task_count: g.task_count,
+    created_at: g.created_at,
+  }));
+}
+
 // ---- Debounced refetch ----
 
 let refetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -141,13 +173,17 @@ let refetchTimer: ReturnType<typeof setTimeout> | null = null;
 function debouncedRefetch() {
   if (refetchTimer) clearTimeout(refetchTimer);
   refetchTimer = setTimeout(async () => {
-    const [newTasks, newProjects, newUsers] = await Promise.all([fetchTasks(), fetchProjects(), fetchUsers()]);
+    const [newTasks, newProjects, newUsers, newGroups] = await Promise.all([
+      fetchTasks(), fetchProjects(), fetchUsers(), fetchTaskGroups(),
+    ]);
     tasks = newTasks;
     projects = newProjects;
     users = newUsers;
+    taskGroups = newGroups;
     emitTasks();
     emitProjects();
     emitUsers();
+    emitGroups();
   }, 100);
 }
 
@@ -160,6 +196,7 @@ function setupRealtime() {
     .on("postgres_changes", { event: "*", schema: "public", table: "task_sections" }, () => debouncedRefetch())
     .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => debouncedRefetch())
     .on("postgres_changes", { event: "*", schema: "public", table: "users" }, () => debouncedRefetch())
+    .on("postgres_changes", { event: "*", schema: "public", table: "task_groups" }, () => debouncedRefetch())
     .subscribe();
 }
 
@@ -170,15 +207,19 @@ async function initStore() {
   initializing = true;
 
   try {
-    const [fetchedTasks, fetchedProjects, fetchedUsers] = await Promise.all([fetchTasks(), fetchProjects(), fetchUsers()]);
+    const [fetchedTasks, fetchedProjects, fetchedUsers, fetchedGroups] = await Promise.all([
+      fetchTasks(), fetchProjects(), fetchUsers(), fetchTaskGroups(),
+    ]);
     tasks = fetchedTasks;
     projects = fetchedProjects;
     users = fetchedUsers;
+    taskGroups = fetchedGroups;
     initialized = true;
 
     emitTasks();
     emitProjects();
     emitUsers();
+    emitGroups();
     setupRealtime();
   } catch (err) {
     console.error("Failed to initialize store:", err);
@@ -233,6 +274,7 @@ export const store = {
           drive_links: newTask.drive_links,
           notes: newTask.notes,
           sort_order: newTask.sort_order,
+          group_id: newTask.group_id || null,
         })
         .select()
         .single();
@@ -635,6 +677,66 @@ export const store = {
     userListeners.add(fn);
     initStore().catch((err) => console.error("Failed to init store:", err));
     return () => userListeners.delete(fn);
+  },
+
+  // --- Task Groups ---
+  getTaskGroups: () => taskGroups,
+
+  subscribeGroups: (fn: Listener) => {
+    groupListeners.add(fn);
+    initStore().catch((err) => console.error("Failed to init store:", err));
+    return () => groupListeners.delete(fn);
+  },
+
+  addTaskGroup: (originalInput: string, createdById: string, createdVia: string, taskCount: number) => {
+    const tempId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const newGroup: TaskGroup = {
+      id: tempId,
+      original_input: originalInput,
+      created_by_id: createdById,
+      created_via: createdVia,
+      task_count: taskCount,
+      created_at: now,
+    };
+    taskGroups = [newGroup, ...taskGroups];
+    emitGroups();
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("task_groups")
+        .insert({
+          original_input: newGroup.original_input,
+          created_by_id: newGroup.created_by_id,
+          created_via: newGroup.created_via,
+          task_count: newGroup.task_count,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error inserting task group:", error);
+        taskGroups = taskGroups.filter((g) => g.id !== tempId);
+        emitGroups();
+        storeErrorEmitter.emit("Failed to create task group");
+        return;
+      }
+
+      // Replace temp ID in groups
+      const realId = data.id;
+      taskGroups = taskGroups.map((g) =>
+        g.id === tempId ? { ...g, id: realId, created_at: data.created_at } : g
+      );
+      emitGroups();
+
+      // Replace temp group_id in tasks that reference the temp ID
+      tasks = tasks.map((t) =>
+        t.group_id === tempId ? { ...t, group_id: realId } : t
+      );
+      emitTasks();
+    })();
+
+    return newGroup;
   },
 
   deleteProject: (id: string) => {

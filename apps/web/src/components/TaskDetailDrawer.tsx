@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Task, TaskStatus, SECTION_PRESETS, FileAttachment } from "@/types";
 import { store } from "@/lib/store";
-import { useProjects, useUsers } from "@/lib/hooks";
+import { useProjects, useUsers, useTaskGroupProgress } from "@/lib/hooks";
 import { useFocusTrap } from "@/lib/use-focus-trap";
 import {
   getUserById,
@@ -108,6 +108,9 @@ export default function TaskDetailDrawer({
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [task, onClose]);
+
+  // Task group progress — null if not in a group or single-task group
+  const groupProgress = useTaskGroupProgress(task?.group_id);
 
   if (!task) return null;
 
@@ -592,6 +595,40 @@ export default function TaskDetailDrawer({
               />
             </div>
           </div>
+
+          {/* ── Task Group ── */}
+          {groupProgress && (
+            <>
+              <div className="border-t border-gray-100" />
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Layers size={14} className={groupProgress.allDone ? "text-green-500" : "text-cyan-500"} />
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    Task Group
+                  </span>
+                  <span className={`text-xs font-bold ${groupProgress.allDone ? "text-green-600" : "text-cyan-600"}`}>
+                    {groupProgress.done}/{groupProgress.total} done
+                  </span>
+                </div>
+
+                {groupProgress.originalInput && (
+                  <p className="text-sm text-gray-500 italic leading-relaxed">
+                    &ldquo;{groupProgress.originalInput}&rdquo;
+                  </p>
+                )}
+
+                {/* Progress bar */}
+                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      groupProgress.allDone ? "bg-green-500" : "bg-cyan-500"
+                    }`}
+                    style={{ width: `${groupProgress.percent}%` }}
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* ── Divider ── */}
           <div className="border-t border-gray-100" />

@@ -6,7 +6,7 @@
  * the "What's New" section so users can see recent updates.
  */
 
-export const APP_VERSION = "1.8.1";
+export const APP_VERSION = "1.9.0";
 export const APP_BUILD_DATE = "2026-02-24";
 
 export interface ChangelogEntry {
@@ -17,6 +17,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.9.0",
+    date: "2026-02-24",
+    title: "Task Groups — multi-task parsing",
+    items: [
+      "AI now parses multiple tasks from a single input (e.g. \"Review deck, draft proposal, schedule meeting\")",
+      "Tasks from one input are grouped together for progress tracking",
+      "Group progress badge on task cards — see 2/3 done at a glance",
+      "Task detail drawer shows group info with progress bar",
+      "Batch task creation with single confirm button",
+    ],
+  },
   {
     version: "1.8.1",
     date: "2026-02-24",

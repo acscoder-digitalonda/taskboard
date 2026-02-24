@@ -54,8 +54,18 @@ export interface Task {
   sort_order?: number;
   email_draft_id?: string;
   source_email_id?: string;
+  group_id?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskGroup {
+  id: string;
+  original_input: string;
+  created_by_id: string;
+  created_via: string;
+  task_count: number;
+  created_at: string;
 }
 
 export interface TaskUpdate {
