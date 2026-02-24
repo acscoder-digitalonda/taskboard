@@ -32,6 +32,25 @@ function getAccessTokenFromStorage(): string | null {
   }
 }
 
+/**
+ * Build a fetch wrapper that adds apikey + Authorization headers.
+ * This replaces the SDK's internal `fetchWithAuth` which hangs because
+ * it calls `_getAccessToken()` → `auth.getSession()` → stuck `_initialize()`.
+ *
+ * Our version reads the JWT from localStorage (instant, 0ms) and falls
+ * back to the anon key for unauthenticated requests.
+ */
+function buildAuthFetch(supabaseKey: string): typeof fetch {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    const accessToken = getAccessTokenFromStorage() ?? supabaseKey;
+    const headers = new Headers(init?.headers);
+    if (!headers.has("apikey")) headers.set("apikey", supabaseKey);
+    // Always set Authorization — override whatever fetchWithAuth may have set
+    headers.set("Authorization", `Bearer ${accessToken}`);
+    return globalThis.fetch(input, { ...init, headers });
+  };
+}
+
 function createSupabaseClient(): SupabaseClient {
   if (!isSupabaseConfigured) {
     // L8: Clearer warning during build / when env vars aren't set.
@@ -42,6 +61,7 @@ function createSupabaseClient(): SupabaseClient {
     );
     return createClient("https://placeholder.supabase.co", "placeholder");
   }
+
   const client = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
@@ -50,36 +70,37 @@ function createSupabaseClient(): SupabaseClient {
     },
   });
 
-  // WORKAROUND: Patch _getAccessToken to read from localStorage directly.
-  // The default implementation calls auth.getSession() which hangs due to
-  // a Supabase SDK v2.95+ bug where the internal _initialize() promise stalls.
-  // This ensures ALL PostgREST queries (from store.ts, etc.) get the correct
-  // JWT auth header without depending on the SDK's internal auth state.
+  // WORKAROUND for Supabase SDK v2.95+ bug:
+  //
+  // The SDK's internal `fetchWithAuth` wraps every REST request with:
+  //   const accessToken = await _getAccessToken();  // calls auth.getSession()
+  // But auth.getSession() hangs because _initialize() stalls.
+  //
+  // We can't patch _getAccessToken because fetchWithAuth captured a bound
+  // reference at construction time. We can't use global.fetch because
+  // fetchWithAuth awaits _getAccessToken BEFORE calling our custom fetch.
+  //
+  // FIX: Replace client.fetch (the fetchWithAuth result) with our own fetch
+  // that reads the JWT from localStorage directly. Then rebuild client.rest
+  // (PostgrestClient) to use the new fetch. This bypasses the hung auth chain.
+  //
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientAny = client as any;
-  const originalGetAccessToken = clientAny._getAccessToken;
-  clientAny._getAccessToken = async function () {
-    // First try reading from localStorage (instant, no SDK dependency)
-    const storedToken = getAccessTokenFromStorage();
-    if (storedToken) return storedToken;
+  const authFetch = buildAuthFetch(supabaseAnonKey);
 
-    // Fallback: try the original method with a 2s timeout
-    // (covers the case where SDK auth actually works, e.g. after OAuth redirect)
-    if (typeof originalGetAccessToken === "function") {
-      try {
-        const result = await Promise.race([
-          originalGetAccessToken.call(this),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
-        ]);
-        if (result && typeof result === "string") return result;
-      } catch {
-        // Original method failed — fall through to anon key
-      }
-    }
+  // Replace the client's fetch wrapper
+  clientAny.fetch = authFetch;
 
-    // Last resort: use anon key (for unauthenticated requests)
-    return supabaseAnonKey;
-  };
+  // Rebuild the REST client with our auth fetch
+  // (PostgrestClient is constructed with: url, { headers, schema, fetch, timeout })
+  if (clientAny.rest) {
+    clientAny.rest.fetch = authFetch;
+  }
+
+  // Also patch the storage client's fetch
+  if (clientAny.storage) {
+    clientAny.storage.fetch = authFetch;
+  }
 
   return client;
 }
