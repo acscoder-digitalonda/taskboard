@@ -316,6 +316,7 @@ function ProfileView({ user, onBack }: { user: User; onBack: () => void }) {
   const { updateProfile } = useAuth();
   const [name, setName] = useState(user.name);
   const [role, setRole] = useState<UserRole>(user.role || "member");
+  const [phone, setPhone] = useState(user.phone || "");
   const [description, setDescription] = useState(user.description || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -324,6 +325,7 @@ function ProfileView({ user, onBack }: { user: User; onBack: () => void }) {
   const hasChanges =
     name !== user.name ||
     role !== (user.role || "member") ||
+    phone !== (user.phone || "") ||
     description !== (user.description || "");
 
   async function handleSave() {
@@ -337,6 +339,7 @@ function ProfileView({ user, onBack }: { user: User; onBack: () => void }) {
       await updateProfile({
         name: name.trim(),
         role,
+        phone: phone.trim() || undefined,
         description: description.trim() || undefined,
       });
       setSaved(true);
@@ -409,6 +412,18 @@ function ProfileView({ user, onBack }: { user: User; onBack: () => void }) {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Phone */}
+        <div>
+          <label className="block text-xs font-bold text-gray-500 mb-1">Phone</label>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-200 focus:border-cyan-300 focus:outline-none transition-colors"
+            placeholder="+1 (555) 123-4567"
+          />
         </div>
 
         {/* Description / Bio */}

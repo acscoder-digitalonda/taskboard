@@ -28,6 +28,7 @@ function mapRowToUser(row: Record<string, unknown>): User {
     avatar_url: row.avatar_url as string | undefined,
     role: (row.role as UserRole) || "member",
     description: (row.description as string) || undefined,
+    phone: (row.phone as string) || undefined,
   };
 }
 
@@ -38,7 +39,7 @@ interface AuthContextValue {
   authError: string | null;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (updates: Partial<Pick<User, "name" | "role" | "description" | "color">>) => Promise<void>;
+  updateProfile: (updates: Partial<Pick<User, "name" | "role" | "description" | "color" | "phone">>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -180,11 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Race getSession against a timeout to prevent infinite hangs.
-        // 8s gives slow networks a fair chance while still recovering from
+        // 12s gives slow networks a fair chance while still recovering from
         // stale tokens that cause Supabase to hang indefinitely.
         const sessionResult = await Promise.race([
           supabase.auth.getSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000)),
         ]);
 
         if (cancelled) return;
@@ -192,14 +193,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const initialSession = sessionResult
           ? (sessionResult as { data: { session: Session | null } }).data.session
           : null;
-        setSession(initialSession);
 
         if (initialSession?.user) {
+          setSession(initialSession);
           const user = await fetchOrUpsertPublicUser(initialSession);
           if (!cancelled) {
             setCurrentUser(user);
             setAuthError(null);
           }
+        } else if (sessionResult === null) {
+          // Timeout — don't set session to null yet; let onAuthStateChange
+          // decide. Just stop the loading spinner so the UI isn't stuck.
+          console.warn("getSession timed out — waiting for auth state listener");
+        } else {
+          // Genuine null session — no user is logged in
+          setSession(null);
         }
       } catch (err) {
         console.error("Auth init failed:", err);
@@ -306,7 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function updateProfile(updates: Partial<Pick<User, "name" | "role" | "description" | "color">>) {
+  async function updateProfile(updates: Partial<Pick<User, "name" | "role" | "description" | "color" | "phone">>) {
     if (!currentUser) return;
 
     // Build the DB update payload
@@ -318,6 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (updates.role !== undefined) dbUpdates.role = updates.role;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.color !== undefined) dbUpdates.color = updates.color;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
 
     const { error } = await supabase
       .from("users")
