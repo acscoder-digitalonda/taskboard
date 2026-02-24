@@ -148,6 +148,15 @@ function AppShell() {
     }
   }, [currentUserId]);
 
+  // Register service worker for PWA install
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        // SW registration failed — not critical for app function
+      });
+    }
+  }, []);
+
   // Check AI availability on mount
   useEffect(() => {
     async function checkAI() {

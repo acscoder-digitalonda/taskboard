@@ -12,6 +12,15 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: "TaskBoard",
   description: "Drag & drop task management with chat-based creation",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "TaskBoard",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({
@@ -22,7 +31,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={roboto.variable}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#00BCD4" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
       <body className={`${roboto.className} bg-white text-gray-900 min-h-screen`}>{children}</body>
     </html>
