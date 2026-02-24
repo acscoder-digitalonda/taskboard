@@ -16,9 +16,11 @@ import {
   HelpCircle,
   UserCog,
   Save,
+  Bell,
 } from "lucide-react";
+import NotificationSettings from "./NotificationSettings";
 
-type MenuView = "main" | "whats-new" | "profile";
+type MenuView = "main" | "whats-new" | "profile" | "notifications";
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "design", label: "Design" },
@@ -122,6 +124,7 @@ export default function UserMenu({
               }}
               onWhatsNew={() => setView("whats-new")}
               onEditProfile={() => setView("profile")}
+              onNotifications={() => setView("notifications")}
               onOpenOnboarding={() => {
                 setOpen(false);
                 onOpenOnboarding?.();
@@ -129,6 +132,8 @@ export default function UserMenu({
             />
           ) : view === "whats-new" ? (
             <WhatsNewView onBack={() => setView("main")} />
+          ) : view === "notifications" ? (
+            <NotificationSettings onBack={() => setView("main")} />
           ) : (
             <ProfileView user={user} onBack={() => setView("main")} />
           )}
@@ -144,6 +149,7 @@ function MainView({
   onSignOut,
   onWhatsNew,
   onEditProfile,
+  onNotifications,
   onOpenOnboarding,
 }: {
   user: User;
@@ -151,6 +157,7 @@ function MainView({
   onSignOut: () => void;
   onWhatsNew: () => void;
   onEditProfile: () => void;
+  onNotifications: () => void;
   onOpenOnboarding: () => void;
 }) {
   return (
@@ -250,6 +257,18 @@ function MainView({
           <div className="flex items-center gap-3">
             <UserCog size={15} className="text-cyan-500" />
             <span>Edit Profile</span>
+          </div>
+          <ChevronRight size={14} className="text-gray-300" />
+        </button>
+
+        {/* Notifications */}
+        <button
+          onClick={onNotifications}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Bell size={15} className="text-cyan-500" />
+            <span>Notifications</span>
           </div>
           <ChevronRight size={14} className="text-gray-300" />
         </button>
