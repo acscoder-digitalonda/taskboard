@@ -178,6 +178,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    /**
+     * Try to restore a session from localStorage directly.
+     * supabase.auth.getSession() often hangs because the internal _initialize()
+     * method stalls. This bypasses that by reading the stored token and calling
+     * setSession() with the refresh token, which forces a fresh session.
+     */
+    async function restoreSessionFromStorage(): Promise<Session | null> {
+      try {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (!url) return null;
+        // Supabase stores the token under "sb-<project-ref>-auth-token"
+        const projectRef = url.replace("https://", "").split(".")[0];
+        const storageKey = `sb-${projectRef}-auth-token`;
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return null;
+
+        const stored = JSON.parse(raw);
+        if (!stored.access_token || !stored.refresh_token) return null;
+
+        // Check if the access token is expired
+        const expiresAt = stored.expires_at; // Unix timestamp in seconds
+        const isExpired = expiresAt && (expiresAt * 1000 < Date.now());
+
+        // Use setSession to restore — this refreshes the token if needed
+        const { data, error } = await supabase.auth.setSession({
+          access_token: stored.access_token,
+          refresh_token: stored.refresh_token,
+        });
+
+        if (error) {
+          console.warn("restoreSessionFromStorage failed:", error.message);
+          // If token is truly invalid, clear it
+          if (error.message?.includes("invalid") || error.message?.includes("expired")) {
+            localStorage.removeItem(storageKey);
+          }
+          return null;
+        }
+
+        return data.session;
+      } catch (err) {
+        console.warn("restoreSessionFromStorage error:", err);
+        return null;
+      }
+    }
+
     async function initAuth() {
       try {
         // In DEV_BYPASS mode, skip the auth session check entirely — it can hang
@@ -189,18 +234,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Try getSession first — this restores from localStorage.
-        // Race against a timeout so we don't hang forever on stale tokens.
+        // STRATEGY: Try getSession with a short timeout, then fall back to
+        // direct localStorage restore. getSession() often hangs because the
+        // Supabase JS client's internal _initialize() stalls.
         const sessionResult = await Promise.race([
           supabase.auth.getSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
         ]);
 
         if (cancelled) return;
 
-        const initialSession = sessionResult
+        let initialSession = sessionResult
           ? (sessionResult as { data: { session: Session | null } }).data.session
           : null;
+
+        // If getSession timed out or returned null, try direct restore
+        if (!initialSession) {
+          if (sessionResult === null) {
+            console.warn("getSession timed out — restoring from localStorage");
+          }
+          initialSession = await restoreSessionFromStorage();
+          if (cancelled) return;
+        }
 
         if (initialSession?.user) {
           setSession(initialSession);
@@ -210,19 +265,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAuthError(null);
           }
           resolveAuth();
-        } else if (sessionResult === null) {
-          // getSession timed out — DON'T resolve yet. The onAuthStateChange
-          // listener below will fire if there's a valid stored token. We use a
-          // secondary fallback timeout (3s) in case the listener never fires.
-          console.warn("getSession timed out — waiting for onAuthStateChange");
-          setTimeout(() => {
-            if (!authResolved && !cancelled) {
-              console.warn("Auth fallback: no session after timeout, showing login");
-              resolveAuth();
-            }
-          }, 3000);
         } else {
-          // Genuine null session — no user is logged in
+          // No session found anywhere — user is not logged in
           setSession(null);
           resolveAuth();
         }
@@ -289,14 +333,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // Ultimate fallback: if nothing resolves auth within 15s, stop loading
+    // Ultimate fallback: if nothing resolves auth within 8s, stop loading
     // to avoid infinite spinner. User will see login page.
     const ultimateTimeout = setTimeout(() => {
       if (!authResolved && !cancelled) {
         console.warn("Auth ultimate timeout — showing login");
         resolveAuth();
       }
-    }, 15000);
+    }, 8000);
 
     return () => {
       cancelled = true;
