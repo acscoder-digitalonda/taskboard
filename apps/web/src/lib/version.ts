@@ -6,7 +6,7 @@
  * the "What's New" section so users can see recent updates.
  */
 
-export const APP_VERSION = "1.6.0";
+export const APP_VERSION = "1.7.0";
 export const APP_BUILD_DATE = "2026-02-23";
 
 export interface ChangelogEntry {
@@ -17,6 +17,17 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.7.0",
+    date: "2026-02-23",
+    title: "Mobile app & notifications",
+    items: [
+      "PWA manifest \u2014 install TaskBoard on iPhone or Android",
+      "Notification preferences \u2014 WhatsApp number, toggles, quiet hours",
+      "WhatsApp notifications via Twilio",
+      "Bug fix: WhatsApp delivery auth header",
+    ],
+  },
   {
     version: "1.6.0",
     date: "2026-02-23",
