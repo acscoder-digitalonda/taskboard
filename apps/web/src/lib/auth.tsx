@@ -178,55 +178,156 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Track which user was restored by Layer 1 to avoid duplicate fetches
+    let initialRestoredUserId: string | null = null;
+
     /**
-     * Try to restore a session from localStorage directly.
-     * supabase.auth.getSession() often hangs because the internal _initialize()
-     * method stalls. This bypasses that by reading the stored token and calling
-     * setSession() with the refresh token, which forces a fresh session.
+     * LAYER 1: Read session from localStorage directly.
+     * Does NOT call any Supabase SDK methods — pure localStorage read.
+     * The Supabase SDK's getSession()/setSession() both hang due to a bug
+     * in v2.95+ where the internal _initialize() promise stalls.
      */
-    async function restoreSessionFromStorage(): Promise<Session | null> {
+    function readSessionFromLocalStorage(): Session | null {
       try {
         const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
         if (!url) return null;
-        // Supabase stores the token under "sb-<project-ref>-auth-token"
         const projectRef = url.replace("https://", "").split(".")[0];
         const storageKey = `sb-${projectRef}-auth-token`;
         const raw = localStorage.getItem(storageKey);
         if (!raw) return null;
 
         const stored = JSON.parse(raw);
-        if (!stored.access_token || !stored.refresh_token) return null;
+        if (!stored.access_token || !stored.refresh_token || !stored.user) return null;
 
-        // Check if the access token is expired
-        const expiresAt = stored.expires_at; // Unix timestamp in seconds
-        const isExpired = expiresAt && (expiresAt * 1000 < Date.now());
-
-        // Use setSession to restore — this refreshes the token if needed
-        const { data, error } = await supabase.auth.setSession({
-          access_token: stored.access_token,
-          refresh_token: stored.refresh_token,
-        });
-
-        if (error) {
-          console.warn("restoreSessionFromStorage failed:", error.message);
-          // If token is truly invalid, clear it
-          if (error.message?.includes("invalid") || error.message?.includes("expired")) {
-            localStorage.removeItem(storageKey);
-          }
+        // Check if token is expired (with 60s grace for clock drift)
+        const expiresAt = stored.expires_at;
+        if (expiresAt && expiresAt * 1000 < Date.now() - 60000) {
+          console.warn("[auth] Stored token expired, clearing");
+          localStorage.removeItem(storageKey);
           return null;
         }
 
-        return data.session;
+        return {
+          access_token: stored.access_token,
+          refresh_token: stored.refresh_token,
+          expires_in: stored.expires_in || 3600,
+          expires_at: stored.expires_at,
+          token_type: stored.token_type || "bearer",
+          user: stored.user,
+        } as Session;
       } catch (err) {
-        console.warn("restoreSessionFromStorage error:", err);
+        console.warn("[auth] readSessionFromLocalStorage error:", err);
         return null;
       }
     }
 
+    /**
+     * LAYER 3: Fetch user profile via direct REST call.
+     * Bypasses the Supabase JS client entirely — uses fetch() with
+     * the access_token from localStorage as Authorization header.
+     * PostgREST validates the JWT independently of the JS client.
+     */
+    async function fetchUserViaRest(sess: Session): Promise<User | null> {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!url || !key) return null;
+
+      const authUser = sess.user;
+      const email = authUser.email?.toLowerCase();
+      if (!email) return null;
+
+      // Check allowed_emails via REST
+      try {
+        const allowRes = await fetch(
+          `${url}/rest/v1/allowed_emails?email=eq.${encodeURIComponent(email)}&select=id&limit=1`,
+          { headers: { apikey: key, Authorization: `Bearer ${sess.access_token}` } }
+        );
+        if (allowRes.ok) {
+          const rows = await allowRes.json();
+          if (rows.length === 0) {
+            // Email not allowed — but check domain fallback
+            const domain = email.split("@")[1];
+            if (!domain || !FALLBACK_ALLOWED_DOMAINS.includes(domain)) return null;
+          }
+        }
+        // If fetch failed (table might not exist), fall through to domain check
+      } catch {
+        const domain = email.split("@")[1];
+        if (!domain || !FALLBACK_ALLOWED_DOMAINS.includes(domain)) return null;
+      }
+
+      // Fetch user profile via REST
+      try {
+        const userRes = await fetch(
+          `${url}/rest/v1/users?id=eq.${authUser.id}&select=*&limit=1`,
+          { headers: { apikey: key, Authorization: `Bearer ${sess.access_token}` } }
+        );
+        if (userRes.ok) {
+          const rows = await userRes.json();
+          if (rows.length > 0) return mapRowToUser(rows[0]);
+        }
+      } catch {
+        // Fall through to upsert
+      }
+
+      // User doesn't exist yet — upsert via REST
+      try {
+        const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || email.split("@")[0] || "User";
+        const initials = generateInitials(name);
+        const color = ACCENT_COLORS[Math.floor(Math.random() * ACCENT_COLORS.length)];
+        const upsertRes = await fetch(`${url}/rest/v1/users`, {
+          method: "POST",
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${sess.access_token}`,
+            "Content-Type": "application/json",
+            Prefer: "return=representation,resolution=merge-duplicates",
+          },
+          body: JSON.stringify({
+            id: authUser.id, email: authUser.email, name, initials, color,
+            avatar_url: authUser.user_metadata?.avatar_url || null, role: "member",
+          }),
+        });
+        if (upsertRes.ok) {
+          const rows = await upsertRes.json();
+          if (rows.length > 0) return mapRowToUser(rows[0]);
+        }
+      } catch {
+        // Failed to upsert
+      }
+
+      return null;
+    }
+
+    /**
+     * BACKGROUND SYNC: Try to get the Supabase JS client into a good state.
+     * Fire-and-forget — if it hangs, the app already works because Layer 1
+     * resolved the UI. If it succeeds, subsequent store.ts/realtime queries
+     * benefit from the SDK's internal auth state.
+     */
+    function syncSupabaseClient(sess: Session) {
+      Promise.race([
+        supabase.auth.setSession({
+          access_token: sess.access_token,
+          refresh_token: sess.refresh_token,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+      ])
+        .then((result: unknown) => {
+          if (cancelled) return;
+          const { data, error } = result as { data: { session: Session | null }; error: unknown };
+          if (data?.session) {
+            setSession(data.session); // Update with potentially refreshed session
+          }
+          if (error) console.warn("[auth] syncSupabaseClient error:", error);
+        })
+        .catch(() => {
+          // Timed out or failed — not critical, Layer 1 already resolved
+        });
+    }
+
     async function initAuth() {
       try {
-        // In DEV_BYPASS mode, skip the auth session check entirely — it can hang
-        // when there's no active session and the Supabase auth client blocks.
         if (DEV_BYPASS_AUTH) {
           const user = await fetchDevBypassUser();
           if (!cancelled) setCurrentUser(user);
@@ -234,9 +335,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // STRATEGY: Try getSession with a short timeout, then fall back to
-        // direct localStorage restore. getSession() often hangs because the
-        // Supabase JS client's internal _initialize() stalls.
+        // ========================================
+        // LAYER 1: Instant localStorage read (0ms)
+        // ========================================
+        const storedSession = readSessionFromLocalStorage();
+
+        if (storedSession?.user) {
+          // Set session immediately — user sees the app, not login page
+          if (!cancelled) setSession(storedSession);
+
+          // LAYER 2: Try SDK-based user fetch (3s timeout)
+          let user: User | null = null;
+          try {
+            user = await Promise.race([
+              fetchOrUpsertPublicUser(storedSession),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+            ]) as User | null;
+          } catch {
+            // SDK call failed — fall through to Layer 3
+          }
+
+          // LAYER 3: REST fallback for user profile
+          if (!user && !cancelled) {
+            try {
+              user = await fetchUserViaRest(storedSession);
+            } catch (err) {
+              console.warn("[auth] fetchUserViaRest failed:", err);
+            }
+          }
+
+          if (!cancelled && user) {
+            setCurrentUser(user);
+            setAuthError(null);
+            initialRestoredUserId = user.id;
+            resolveAuth();
+          } else if (!cancelled) {
+            // Token exists but user fetch failed — may be invalid
+            setSession(null);
+            resolveAuth();
+          }
+
+          // BACKGROUND: Sync Supabase client (non-blocking)
+          if (!cancelled) syncSupabaseClient(storedSession);
+          return;
+        }
+
+        // ========================================
+        // NO STORED TOKEN: User genuinely not logged in
+        // ========================================
+        // Still try getSession() briefly in case of OAuth redirect
         const sessionResult = await Promise.race([
           supabase.auth.getSession(),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
@@ -244,34 +391,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (cancelled) return;
 
-        let initialSession = sessionResult
+        const sdkSession = sessionResult
           ? (sessionResult as { data: { session: Session | null } }).data.session
           : null;
 
-        // If getSession timed out or returned null, try direct restore
-        if (!initialSession) {
-          if (sessionResult === null) {
-            console.warn("getSession timed out — restoring from localStorage");
+        if (sdkSession?.user) {
+          setSession(sdkSession);
+          try {
+            const user = await fetchOrUpsertPublicUser(sdkSession);
+            if (!cancelled) {
+              setCurrentUser(user);
+              setAuthError(null);
+            }
+          } catch (err) {
+            console.warn("[auth] New session user fetch failed:", err);
           }
-          initialSession = await restoreSessionFromStorage();
-          if (cancelled) return;
         }
 
-        if (initialSession?.user) {
-          setSession(initialSession);
-          const user = await fetchOrUpsertPublicUser(initialSession);
-          if (!cancelled) {
-            setCurrentUser(user);
-            setAuthError(null);
-          }
-          resolveAuth();
-        } else {
-          // No session found anywhere — user is not logged in
-          setSession(null);
-          resolveAuth();
-        }
+        resolveAuth();
       } catch (err) {
-        console.error("Auth init failed:", err);
+        console.error("[auth] initAuth failed:", err);
         if (!cancelled) {
           setAuthError(err instanceof Error ? err.message : "Sign-in failed");
           setCurrentUser(null);
@@ -283,27 +422,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth();
 
-    // In DEV_BYPASS mode, skip auth state listener — the Supabase auth client's
-    // internal initialization can hang when there's no active session.
+    // In DEV_BYPASS mode, skip auth state listener
     if (DEV_BYPASS_AUTH) {
       return () => { cancelled = true; };
     }
 
-    // onAuthStateChange fires when Supabase SDK restores session from storage
-    // or when a new sign-in/sign-out occurs. This is the definitive source.
+    // onAuthStateChange: handles new sign-ins, sign-outs, and token refreshes.
+    // If Layer 1 already restored the same user, skip the duplicate fetch.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (_event, newSession) => {
         if (cancelled) return;
-        setSession(session);
-        if (session?.user) {
+
+        // Skip redundant fetch if Layer 1 already restored this user
+        if (newSession?.user?.id === initialRestoredUserId && authResolved) {
+          setSession(newSession); // Still update session (may be refreshed)
+          return;
+        }
+
+        setSession(newSession);
+        if (newSession?.user) {
           try {
-            const user = await fetchOrUpsertPublicUser(session);
+            const user = await fetchOrUpsertPublicUser(newSession);
             if (!cancelled) {
               setCurrentUser(user);
               setAuthError(null);
             }
           } catch (err) {
-            console.error("Auth state change user fetch failed:", err);
+            console.error("[auth] onAuthStateChange user fetch failed:", err);
             if (!cancelled) {
               setAuthError(err instanceof Error ? err.message : "Sign-in failed");
               setCurrentUser(null);
@@ -317,30 +462,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // Proactively refresh session when user returns to the app (e.g., opening
-    // PWA after hours/days away). This prevents stale access tokens from causing
-    // a logout — the SDK refreshes using the stored refresh token.
+    // Refresh session when user returns to the app (visibility change)
     function handleVisibilityChange() {
       if (document.visibilityState === "visible" && !cancelled) {
-        supabase.auth.getSession().then(({ data: { session: freshSession } }) => {
-          if (freshSession && !cancelled) {
-            setSession(freshSession);
+        Promise.race([
+          supabase.auth.getSession(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]).then((result) => {
+          if (result && !cancelled) {
+            const fresh = (result as { data: { session: Session | null } }).data.session;
+            if (fresh) setSession(fresh);
           }
-        }).catch(() => {
-          // Silent — the onAuthStateChange listener will handle sign-out if needed
-        });
+        }).catch(() => { /* silent */ });
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // Ultimate fallback: if nothing resolves auth within 8s, stop loading
-    // to avoid infinite spinner. User will see login page.
+    // Ultimate fallback: Layer 1 should resolve in <500ms, so 5s is generous
     const ultimateTimeout = setTimeout(() => {
       if (!authResolved && !cancelled) {
-        console.warn("Auth ultimate timeout — showing login");
+        console.warn("[auth] Ultimate timeout — showing login");
         resolveAuth();
       }
-    }, 8000);
+    }, 5000);
 
     return () => {
       cancelled = true;

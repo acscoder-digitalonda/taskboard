@@ -26,8 +26,15 @@ export default function AuthCallback() {
     });
 
     // Fallback: if session already exists, redirect immediately
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace("/");
+    // Wrap with timeout — getSession() can hang due to Supabase SDK bug
+    Promise.race([
+      supabase.auth.getSession(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]).then((result) => {
+      if (result) {
+        const sess = (result as { data: { session: unknown } }).data.session;
+        if (sess) router.replace("/");
+      }
     });
 
     // Timeout: if nothing happens in 15s, show error
