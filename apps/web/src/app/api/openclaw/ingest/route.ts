@@ -109,7 +109,10 @@ export async function POST(req: NextRequest) {
       if (taskInput.assignee_id && !notifiedUsers.has(taskInput.assignee_id)) {
         await fetch(`${req.nextUrl.origin}/api/notifications/send`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Webhook-Secret": process.env.WEBHOOK_SECRET || "",
+          },
           body: JSON.stringify({
             user_id: taskInput.assignee_id,
             type: "task_assigned",
@@ -118,7 +121,6 @@ export async function POST(req: NextRequest) {
             link: `/tasks/${task.id}`,
             reference_id: task.id,
             reference_type: "task",
-            send_whatsapp: true,
           }),
         });
         notifiedUsers.add(taskInput.assignee_id);

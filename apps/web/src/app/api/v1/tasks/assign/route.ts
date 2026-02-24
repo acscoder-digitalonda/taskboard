@@ -94,6 +94,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Notify the assignee
+    if (task.assignee_id) {
+      try {
+        await fetch(`${req.nextUrl.origin}/api/notifications/send`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Webhook-Secret": process.env.WEBHOOK_SECRET || "",
+          },
+          body: JSON.stringify({
+            user_id: task.assignee_id,
+            type: "task_assigned",
+            title: `New task: ${task.title}`,
+            body: "Created via external API",
+            link: `/tasks/${task.id}`,
+            reference_id: task.id,
+            reference_type: "task",
+          }),
+        });
+      } catch (notifErr) {
+        console.error("Failed to send task assignment notification:", notifErr);
+      }
+    }
+
     // Look up names for the response
     const userMap = new Map(users.map((u) => [u.id, u.name]));
     const projectMap = new Map(projects.map((p) => [p.id, p.name]));

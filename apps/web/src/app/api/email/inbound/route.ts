@@ -491,18 +491,35 @@ export async function POST(req: NextRequest) {
         .select("id")
         .eq("role", "pm");
 
+      // Send notifications via /api/notifications/send for push + WhatsApp delivery
+      const sendNotification = async (payload: Record<string, unknown>) => {
+        try {
+          await fetch(`${req.nextUrl.origin}/api/notifications/send`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Webhook-Secret": process.env.WEBHOOK_SECRET || "",
+            },
+            body: JSON.stringify(payload),
+          });
+        } catch (err) {
+          console.error("Notification send failed:", err);
+        }
+      };
+
       if (pmUsers?.length) {
-        await supabase.from("notifications").insert(
-          pmUsers.map((u) => ({
-            user_id: u.id,
-            type: "email_triage" as const,
-            title: `New email triaged: ${triageResult!.category}`,
-            body: `${senderName}: "${subject}" — review draft reply`,
-            link: channelId ? `/messages/${channelId}` : null,
-            channel: "in_app" as const,
-            reference_id: draftId,
-            reference_type: "email_draft",
-          }))
+        await Promise.allSettled(
+          pmUsers.map((u) =>
+            sendNotification({
+              user_id: u.id,
+              type: "email_triage",
+              title: `New email triaged: ${triageResult!.category}`,
+              body: `${senderName}: "${subject}" — review draft reply`,
+              link: channelId ? `/messages/${channelId}` : null,
+              reference_id: draftId,
+              reference_type: "email_draft",
+            })
+          )
         );
       }
 
@@ -515,13 +532,12 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (assignee) {
-        await supabase.from("notifications").insert({
+        await sendNotification({
           user_id: assignee.id,
-          type: "task_assigned" as const,
+          type: "task_assigned",
           title: `New task: ${triageResult.task_title}`,
           body: `From email: ${senderName} — ${subject}`,
           link: `/tasks/${taskId}`,
-          channel: "in_app" as const,
           reference_id: taskId,
           reference_type: "task",
         });
@@ -534,17 +550,33 @@ export async function POST(req: NextRequest) {
         .limit(20);
 
       if (teamUsers) {
-        await supabase.from("notifications").insert(
-          teamUsers.map((u) => ({
-            user_id: u.id,
-            type: "email_ingested" as const,
-            title: `Email from ${senderName}`,
-            body: subject,
-            link: channelId ? `/messages/${channelId}` : null,
-            channel: "in_app" as const,
-            reference_id: channelId,
-            reference_type: channelId ? "channel" : null,
-          }))
+        const sendNotification = async (payload: Record<string, unknown>) => {
+          try {
+            await fetch(`${req.nextUrl.origin}/api/notifications/send`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Webhook-Secret": process.env.WEBHOOK_SECRET || "",
+              },
+              body: JSON.stringify(payload),
+            });
+          } catch (err) {
+            console.error("Notification send failed:", err);
+          }
+        };
+
+        await Promise.allSettled(
+          teamUsers.map((u) =>
+            sendNotification({
+              user_id: u.id,
+              type: "email_ingested",
+              title: `Email from ${senderName}`,
+              body: subject,
+              link: channelId ? `/messages/${channelId}` : null,
+              reference_id: channelId,
+              reference_type: channelId ? "channel" : null,
+            })
+          )
         );
       }
     }

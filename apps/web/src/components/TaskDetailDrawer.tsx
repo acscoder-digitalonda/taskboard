@@ -34,6 +34,7 @@ import {
   Mail,
 } from "lucide-react";
 import { getTaskFiles, deleteFile } from "@/lib/files";
+import { apiFetch } from "@/lib/api-client";
 import FileUploadZone from "./FileUploadZone";
 import FileList from "./FileList";
 
@@ -456,9 +457,27 @@ export default function TaskDetailDrawer({
               </div>
               <select
                 value={task.assignee_id}
-                onChange={(e) =>
-                  store.updateTask(task.id, { assignee_id: e.target.value })
-                }
+                onChange={(e) => {
+                  const newAssignee = e.target.value;
+                  const oldAssignee = task.assignee_id;
+                  store.updateTask(task.id, { assignee_id: newAssignee });
+
+                  // Send notification if assignee changed and it's not self-assign
+                  if (newAssignee !== oldAssignee && newAssignee !== currentUserId) {
+                    apiFetch("/api/notifications/send", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        user_id: newAssignee,
+                        type: "task_assigned",
+                        title: `Task assigned: ${task.title}`,
+                        body: `${getUserById(currentUserId || "")?.name || "Someone"} assigned you a task`,
+                        link: `/tasks/${task.id}`,
+                        reference_id: task.id,
+                        reference_type: "task",
+                      }),
+                    }).catch(() => {});
+                  }
+                }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               >
                 {users.map((u) => (

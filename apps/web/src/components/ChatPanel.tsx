@@ -193,7 +193,6 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
             link: `/tasks/${task.id}`,
             reference_id: task.id,
             reference_type: "task",
-            send_whatsapp: notifyLevel === "whatsapp",
           }),
         });
       } catch (err) {
