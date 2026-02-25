@@ -11,7 +11,7 @@ export const isSupabaseConfigured =
  * This bypasses the Supabase SDK's internal auth state which can hang
  * due to a bug in v2.95+ where _initialize() stalls.
  */
-function getAccessTokenFromStorage(): string | null {
+export function getAccessTokenFromStorage(): string | null {
   if (typeof window === "undefined") return null;
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

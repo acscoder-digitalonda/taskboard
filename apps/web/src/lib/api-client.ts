@@ -1,48 +1,83 @@
 /**
  * Authenticated API client for frontend → backend calls.
  *
- * Wraps `fetch` with a Bearer token from the current Supabase session.
- * In DEV_BYPASS mode the token is omitted and the server-side auth
- * middleware accepts the request without verification.
+ * Wraps `fetch` with a Bearer token read directly from localStorage.
  *
- * Automatic retry on 401: if the first request returns 401 Unauthorized
- * the client refreshes the session once and retries with the new token.
+ * IMPORTANT: We do NOT use supabase.auth.getSession() because the
+ * Supabase SDK v2.95+ has a bug where _initialize() / getSession() can
+ * hang indefinitely (Navigator Lock deadlock, Issue #1594). Instead we
+ * read the JWT from localStorage (0ms, no SDK dependency) — the same
+ * approach used by buildAuthFetch in supabase.ts.
+ *
+ * Automatic retry on 401: if the first request returns 401 Unauthorized,
+ * refreshes the token via Supabase REST API and retries once.
  *
  * Usage:
  *   import { apiFetch } from "@/lib/api-client";
  *   const res = await apiFetch("/api/email/drafts", { method: "POST", body: ... });
  */
 
-import { supabase } from "./supabase";
+import { getAccessTokenFromStorage } from "./supabase";
 
 const DEV_BYPASS_AUTH = process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === "true";
 
 /**
- * Retrieve the current access token from the Supabase session.
- * Returns null when no session exists or in DEV_BYPASS mode.
+ * Retrieve the current access token from localStorage.
+ * Instant (0ms) — no SDK calls, no async, no risk of hanging.
  */
-async function getAccessToken(): Promise<string | null> {
+function getAccessToken(): string | null {
   if (DEV_BYPASS_AUTH) return null;
-
-  try {
-    const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
-  } catch {
-    return null;
-  }
+  return getAccessTokenFromStorage();
 }
 
 /**
- * Force-refresh the Supabase session and return the new access token.
- * Returns null if refresh fails.
+ * Refresh the token via Supabase REST API (bypasses SDK entirely).
+ * Reads the refresh_token from localStorage, POSTs to /auth/v1/token,
+ * and saves the new tokens back to localStorage.
  */
 async function refreshAccessToken(): Promise<string | null> {
   if (DEV_BYPASS_AUTH) return null;
+  if (typeof window === "undefined") return null;
 
   try {
-    const { data, error } = await supabase.auth.refreshSession();
-    if (error || !data.session) return null;
-    return data.session.access_token;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return null;
+
+    const projectRef = url.replace("https://", "").split(".")[0];
+    const storageKey = `sb-${projectRef}-auth-token`;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+
+    const stored = JSON.parse(raw);
+    if (!stored.refresh_token) return null;
+
+    const res = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: stored.refresh_token }),
+    });
+
+    if (!res.ok) return null;
+
+    const refreshed = await res.json();
+    if (!refreshed.access_token || !refreshed.refresh_token) return null;
+
+    // Save refreshed tokens to localStorage
+    const newStored = {
+      ...stored,
+      access_token: refreshed.access_token,
+      refresh_token: refreshed.refresh_token,
+      expires_at: refreshed.expires_at,
+      expires_in: refreshed.expires_in,
+      user: refreshed.user,
+    };
+    localStorage.setItem(storageKey, JSON.stringify(newStored));
+
+    return refreshed.access_token;
   } catch {
     return null;
   }
@@ -70,17 +105,18 @@ function buildHeaders(init: RequestInit, token: string | null): Headers {
  * A thin wrapper around `fetch` that automatically attaches
  * the Supabase JWT as an `Authorization: Bearer <token>` header.
  *
+ * - Reads JWT from localStorage (instant, no SDK calls).
  * - Merges caller-provided headers with the auth header.
  * - Adds `Content-Type: application/json` when body is present and
  *   Content-Type hasn't been set explicitly.
  * - In DEV_BYPASS mode the Authorization header is skipped.
- * - On 401 response, refreshes the session and retries once.
+ * - On 401 response, refreshes the token via REST API and retries once.
  */
 export async function apiFetch(
   url: string,
   init: RequestInit = {}
 ): Promise<Response> {
-  const token = await getAccessToken();
+  const token = getAccessToken();
   const headers = buildHeaders(init, token);
 
   const res = await fetch(url, { ...init, headers });
