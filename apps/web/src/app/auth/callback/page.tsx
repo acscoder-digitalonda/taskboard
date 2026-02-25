@@ -4,6 +4,63 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+/**
+ * Parse the OAuth hash fragment that Supabase appends to the callback URL.
+ * Format: #access_token=...&refresh_token=...&expires_in=3600&token_type=bearer&type=signup
+ * The SDK's _initialize() is supposed to do this, but it hangs (see Issue #1594).
+ */
+function parseHashSession(): { access_token: string; refresh_token: string; expires_in: number; user?: unknown } | null {
+  try {
+    const hash = window.location.hash.substring(1); // remove leading #
+    if (!hash) return null;
+    const params = new URLSearchParams(hash);
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    if (!access_token || !refresh_token) return null;
+    return {
+      access_token,
+      refresh_token,
+      expires_in: parseInt(params.get("expires_in") || "3600", 10),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Store session tokens in localStorage so the rest of the app can read them.
+ * Mirrors the format the Supabase SDK uses internally.
+ */
+async function storeSessionViaRest(tokens: { access_token: string; refresh_token: string; expires_in: number }) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return false;
+
+  // Fetch the user profile from the access token
+  const userRes = await fetch(`${url}/auth/v1/user`, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${tokens.access_token}`,
+    },
+  });
+  if (!userRes.ok) return false;
+  const user = await userRes.json();
+
+  // Store in localStorage using Supabase's expected format
+  const projectRef = url.replace("https://", "").split(".")[0];
+  const storageKey = `sb-${projectRef}-auth-token`;
+  const stored = {
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_in: tokens.expires_in,
+    expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
+    token_type: "bearer",
+    user,
+  };
+  localStorage.setItem(storageKey, JSON.stringify(stored));
+  return true;
+}
+
 export default function AuthCallback() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -19,27 +76,54 @@ export default function AuthCallback() {
       return;
     }
 
+    let redirected = false;
+
+    function doRedirect() {
+      if (!redirected) {
+        redirected = true;
+        router.replace("/");
+      }
+    }
+
+    // ── LAYER 1: Parse hash fragment directly (instant, no SDK) ──
+    // After Google OAuth, Supabase redirects to /auth/callback#access_token=...
+    // The SDK normally parses this, but _initialize() can hang.
+    const hashTokens = parseHashSession();
+    if (hashTokens) {
+      storeSessionViaRest(hashTokens)
+        .then((ok) => {
+          if (ok) {
+            // Clear hash from URL to prevent re-processing
+            window.history.replaceState(null, "", window.location.pathname);
+            doRedirect();
+          }
+        })
+        .catch(() => { /* fall through to SDK layers */ });
+    }
+
+    // ── LAYER 2: SDK listener (may work if _initialize doesn't hang) ──
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN") {
-        router.replace("/");
+        doRedirect();
       }
     });
 
-    // Fallback: if session already exists, redirect immediately
-    // Wrap with timeout — getSession() can hang due to Supabase SDK bug
+    // ── LAYER 3: getSession() with timeout ──
     Promise.race([
       supabase.auth.getSession(),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
     ]).then((result) => {
       if (result) {
         const sess = (result as { data: { session: unknown } }).data.session;
-        if (sess) router.replace("/");
+        if (sess) doRedirect();
       }
     });
 
-    // Timeout: if nothing happens in 15s, show error
+    // Timeout: if nothing works in 15s, show error
     const timeout = setTimeout(() => {
-      setError("Sign-in timed out. This usually means a stale session is stuck in your browser.");
+      if (!redirected) {
+        setError("Sign-in timed out. This usually means a stale session is stuck in your browser.");
+      }
     }, 15000);
 
     return () => {
