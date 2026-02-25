@@ -462,21 +462,101 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
+    /**
+     * MANUAL TOKEN REFRESH via Supabase REST API.
+     * Bypasses the SDK entirely (which hangs on getSession/_initialize).
+     * Uses the refresh_token from localStorage to get a fresh access_token.
+     */
+    async function refreshTokenViaRest(): Promise<Session | null> {
+      try {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (!url || !key) return null;
+
+        const projectRef = url.replace("https://", "").split(".")[0];
+        const storageKey = `sb-${projectRef}-auth-token`;
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return null;
+
+        const stored = JSON.parse(raw);
+        if (!stored.refresh_token) return null;
+
+        const res = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          headers: {
+            apikey: key,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refresh_token: stored.refresh_token }),
+        });
+
+        if (!res.ok) {
+          console.warn("[auth] Token refresh failed:", res.status);
+          return null;
+        }
+
+        const refreshed = await res.json();
+        if (!refreshed.access_token || !refreshed.refresh_token || !refreshed.user) return null;
+
+        // Save refreshed tokens to localStorage
+        const newStored = {
+          ...stored,
+          access_token: refreshed.access_token,
+          refresh_token: refreshed.refresh_token,
+          expires_at: refreshed.expires_at,
+          expires_in: refreshed.expires_in,
+          user: refreshed.user,
+        };
+        localStorage.setItem(storageKey, JSON.stringify(newStored));
+
+        return {
+          access_token: refreshed.access_token,
+          refresh_token: refreshed.refresh_token,
+          expires_in: refreshed.expires_in || 3600,
+          expires_at: refreshed.expires_at,
+          token_type: refreshed.token_type || "bearer",
+          user: refreshed.user,
+        } as Session;
+      } catch (err) {
+        console.warn("[auth] refreshTokenViaRest error:", err);
+        return null;
+      }
+    }
+
     // Refresh session when user returns to the app (visibility change)
     function handleVisibilityChange() {
       if (document.visibilityState === "visible" && !cancelled) {
-        Promise.race([
-          supabase.auth.getSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-        ]).then((result) => {
-          if (result && !cancelled) {
-            const fresh = (result as { data: { session: Session | null } }).data.session;
-            if (fresh) setSession(fresh);
+        // Use our REST-based refresh instead of SDK's getSession (which hangs)
+        refreshTokenViaRest().then((freshSession) => {
+          if (freshSession && !cancelled) {
+            setSession(freshSession);
+            // Also try to sync SDK in background (non-blocking)
+            syncSupabaseClient(freshSession);
           }
         }).catch(() => { /* silent */ });
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Proactive token refresh: refresh 5 minutes before expiry.
+    // Supabase JWTs default to 1 hour — this keeps the session alive
+    // as long as the tab is open, even if the user doesn't switch away and back.
+    const refreshInterval = setInterval(() => {
+      if (cancelled) return;
+      const storedSession = readSessionFromLocalStorage();
+      if (!storedSession?.expires_at) return;
+
+      const expiresInMs = storedSession.expires_at * 1000 - Date.now();
+      // Refresh when less than 5 minutes remain
+      if (expiresInMs < 5 * 60 * 1000) {
+        refreshTokenViaRest().then((freshSession) => {
+          if (freshSession && !cancelled) {
+            setSession(freshSession);
+            syncSupabaseClient(freshSession);
+          }
+        }).catch(() => { /* silent */ });
+      }
+    }, 60_000); // Check every minute
 
     // Ultimate fallback: Layer 1 should resolve in <500ms, so 5s is generous
     const ultimateTimeout = setTimeout(() => {
@@ -490,6 +570,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       subscription.unsubscribe();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(refreshInterval);
       clearTimeout(ultimateTimeout);
     };
   }, []);
