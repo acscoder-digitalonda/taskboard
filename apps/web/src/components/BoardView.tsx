@@ -20,7 +20,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { useDroppable } from "@dnd-kit/core";
 import { Task, TaskStatus } from "@/types";
 import { useTasks } from "@/lib/hooks";
-import { STATUS_LABELS, STATUS_COLORS } from "@/lib/utils";
+import { STATUS_LABELS, STATUS_COLORS, getUserById } from "@/lib/utils";
+import { apiFetch } from "@/lib/api-client";
 import TaskCard from "./TaskCard";
 
 const COLUMNS: TaskStatus[] = ["backlog", "doing", "waiting", "done"];
@@ -119,12 +120,14 @@ interface BoardViewProps {
   filteredTasks: Task[];
   onClickCard?: (task: Task) => void;
   loading?: boolean;
+  currentUserId?: string;
 }
 
 export default function BoardView({
   filteredTasks,
   onClickCard,
   loading,
+  currentUserId,
 }: BoardViewProps) {
   const { moveTask } = useTasks();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -149,15 +152,46 @@ export default function BoardView({
 
     const taskId = active.id as string;
     const overId = over.id as string;
+    const draggedTask = filteredTasks.find((t) => t.id === taskId);
+
+    let newStatus: TaskStatus | null = null;
 
     if (COLUMNS.includes(overId as TaskStatus)) {
-      moveTask(taskId, overId as TaskStatus);
-      return;
+      newStatus = overId as TaskStatus;
+      moveTask(taskId, newStatus);
+    } else {
+      const overTask = filteredTasks.find((t) => t.id === overId);
+      if (overTask) {
+        newStatus = overTask.status;
+        moveTask(taskId, newStatus);
+      }
     }
 
-    const overTask = filteredTasks.find((t) => t.id === overId);
-    if (overTask) {
-      moveTask(taskId, overTask.status);
+    // Send notification to assignee if status actually changed
+    if (
+      draggedTask &&
+      newStatus &&
+      newStatus !== draggedTask.status &&
+      draggedTask.assignee_id &&
+      draggedTask.assignee_id !== currentUserId
+    ) {
+      const actorName = getUserById(currentUserId || "")?.name || "Someone";
+      const type = newStatus === "done" ? "task_completed" : "task_updated";
+      apiFetch("/api/notifications/send", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: draggedTask.assignee_id,
+          type,
+          title:
+            newStatus === "done"
+              ? `Task completed: ${draggedTask.title}`
+              : `Task status changed: ${draggedTask.title}`,
+          body: `${actorName} changed status to ${STATUS_LABELS[newStatus]}`,
+          link: `/tasks/${draggedTask.id}`,
+          reference_id: draggedTask.id,
+          reference_type: "task",
+        }),
+      }).catch((err) => console.error("Notification failed:", err));
     }
   }
 

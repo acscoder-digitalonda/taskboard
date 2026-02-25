@@ -18,6 +18,7 @@ interface PushPayload {
   body?: string;
   link?: string;
   icon?: string;
+  id?: string;
 }
 
 /**

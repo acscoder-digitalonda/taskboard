@@ -169,6 +169,7 @@ export async function POST(req: NextRequest) {
           title,
           body: body || undefined,
           link: link || undefined,
+          id: notif.id,
         });
         if (pushSent > 0) {
           await supabase

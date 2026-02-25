@@ -297,6 +297,7 @@ function AppShell() {
                     filteredTasks={filteredTasks}
                     onClickCard={handleClickCard}
                     loading={tasksLoading}
+                    currentUserId={currentUserId}
                   />
                 )}
                 {viewMode === "list" && (
@@ -304,6 +305,7 @@ function AppShell() {
                     filteredTasks={filteredTasks}
                     onClickCard={handleClickCard}
                     loading={tasksLoading}
+                    currentUserId={currentUserId}
                   />
                 )}
                 {viewMode === "myday" && (

@@ -3,6 +3,7 @@
 import { Task } from "@/types";
 import { getUserById, getProjectById, formatDue, isOverdue, STATUS_LABELS, STATUS_COLORS } from "@/lib/utils";
 import { store } from "@/lib/store";
+import { apiFetch } from "@/lib/api-client";
 import { CheckCircle2, Clock, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
@@ -10,11 +11,12 @@ interface ListViewProps {
   filteredTasks: Task[];
   onClickCard?: (task: Task) => void;
   loading?: boolean;
+  currentUserId?: string;
 }
 
 type SortKey = "title" | "assignee" | "project" | "status" | "due" | "priority";
 
-export default function ListView({ filteredTasks, onClickCard, loading }: ListViewProps) {
+export default function ListView({ filteredTasks, onClickCard, loading, currentUserId }: ListViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>("priority");
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -185,6 +187,22 @@ export default function ListView({ filteredTasks, onClickCard, loading }: ListVi
                         onClick={(e) => {
                           e.stopPropagation();
                           store.moveTask(task.id, "done");
+                          // Notify assignee
+                          if (task.assignee_id && task.assignee_id !== currentUserId) {
+                            const actorName = getUserById(currentUserId || "")?.name || "Someone";
+                            apiFetch("/api/notifications/send", {
+                              method: "POST",
+                              body: JSON.stringify({
+                                user_id: task.assignee_id,
+                                type: "task_completed",
+                                title: `Task completed: ${task.title}`,
+                                body: `${actorName} marked this task as done`,
+                                link: `/tasks/${task.id}`,
+                                reference_id: task.id,
+                                reference_type: "task",
+                              }),
+                            }).catch((err) => console.error("Notification failed:", err));
+                          }
                         }}
                         className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600 transition-colors"
                         title="Mark done"
@@ -292,6 +310,22 @@ export default function ListView({ filteredTasks, onClickCard, loading }: ListVi
                     onClick={(e) => {
                       e.stopPropagation();
                       store.moveTask(task.id, "done");
+                      // Notify assignee
+                      if (task.assignee_id && task.assignee_id !== currentUserId) {
+                        const actorName = getUserById(currentUserId || "")?.name || "Someone";
+                        apiFetch("/api/notifications/send", {
+                          method: "POST",
+                          body: JSON.stringify({
+                            user_id: task.assignee_id,
+                            type: "task_completed",
+                            title: `Task completed: ${task.title}`,
+                            body: `${actorName} marked this task as done`,
+                            link: `/tasks/${task.id}`,
+                            reference_id: task.id,
+                            reference_type: "task",
+                          }),
+                        }).catch((err) => console.error("Notification failed:", err));
+                      }
                     }}
                     className="p-2 rounded-lg text-gray-300 hover:text-green-600 active:bg-green-50 transition-colors flex-shrink-0"
                   >
