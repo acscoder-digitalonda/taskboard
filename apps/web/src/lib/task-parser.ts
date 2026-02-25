@@ -155,3 +155,100 @@ export async function parseTaskWithLLM(
   const batch = await parseTasksWithLLM(text, users, projects);
   return batch.tasks[0];
 }
+
+/**
+ * Basic regex-only task parser — server-side fallback when LLM is unavailable.
+ *
+ * Same signature as parseTasksWithLLM but uses simple regex patterns instead
+ * of calling Claude. Returns a single task with lower confidence (0.3).
+ *
+ * Capabilities:
+ * - Assignee: "assign to <name>" or "@<name>"
+ * - Project: "project: <name>" or "project <name>"
+ * - Due dates: "due today", "due tomorrow", "due in N days"
+ * - Priority: "urgent", "asap", "critical" → priority 1; default 3
+ * - Status: defaults to "doing"
+ */
+export function parseTasksBasic(
+  text: string,
+  users: { id: string; name: string; role?: string; description?: string }[],
+  projects: { id: string; name: string }[]
+): ParsedTaskBatch {
+  const input = text.trim();
+  let title = input;
+  let assignee_id: string | null = null;
+  let project_id: string | null = null;
+  let due_at: string | null = null;
+  let priority = 3;
+
+  // --- Assignee: "assign to Katie" or "@Katie" ---
+  const assignMatch = input.match(/(?:assign(?:ed)?\s+to\s+|@)(\w+)/i);
+  if (assignMatch) {
+    const name = assignMatch[1].toLowerCase();
+    const user = users.find((u) => u.name.toLowerCase() === name);
+    if (user) {
+      assignee_id = user.id;
+      title = title.replace(assignMatch[0], "").trim();
+    }
+  }
+
+  // --- Project: "project: TaskBoard" or "project TaskBoard" ---
+  const projMatch = input.match(/project[:\s]+(\w+)/i);
+  if (projMatch) {
+    const projName = projMatch[1].toLowerCase();
+    const proj = projects.find((p) => p.name.toLowerCase().includes(projName));
+    if (proj) {
+      project_id = proj.id;
+      title = title.replace(projMatch[0], "").trim();
+    }
+  }
+
+  // --- Due date: "due today", "due tomorrow", "due in 3 days" ---
+  const dueMatch = input.match(/due\s+(today|tomorrow|in\s+(\d+)\s+days?)/i);
+  if (dueMatch) {
+    const now = new Date();
+    if (dueMatch[1].toLowerCase() === "today") {
+      now.setHours(17, 0, 0, 0);
+      due_at = now.toISOString();
+    } else if (dueMatch[1].toLowerCase() === "tomorrow") {
+      now.setDate(now.getDate() + 1);
+      now.setHours(17, 0, 0, 0);
+      due_at = now.toISOString();
+    } else if (dueMatch[2]) {
+      now.setDate(now.getDate() + parseInt(dueMatch[2]));
+      now.setHours(17, 0, 0, 0);
+      due_at = now.toISOString();
+    }
+    title = title.replace(dueMatch[0], "").trim();
+  }
+
+  // --- Priority: urgent/asap/critical → 1 ---
+  if (/\b(urgent|asap|critical)\b/i.test(input)) {
+    priority = 1;
+  }
+
+  // --- Clean up title ---
+  title = title
+    .replace(/,\s*$/, "")
+    .replace(/,\s*,/g, ",")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Fall back to original input if title is empty after cleanup
+  if (!title) title = input;
+
+  const task: ParsedTask = {
+    title,
+    assignee_id,
+    project_id,
+    due_at,
+    priority,
+    status: "doing",
+    confidence: 0.3,
+  };
+
+  return {
+    tasks: [task],
+    confidence: 0.3,
+  };
+}

@@ -3,7 +3,7 @@ import {
   getAuthenticatedUserId,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { parseTasksWithLLM } from "@/lib/task-parser";
+import { parseTasksWithLLM, parseTasksBasic } from "@/lib/task-parser";
 
 export async function POST(req: NextRequest) {
   // Auth check (same pattern as email/drafts/route.ts)
@@ -26,11 +26,23 @@ export async function POST(req: NextRequest) {
       success: true,
       parsed: batch.tasks,
       confidence: batch.confidence,
+      parser: "ai",
     });
   } catch (error) {
-    console.error("Claude API error:", error);
-    const errorMessage =
-      error instanceof Error ? error.message : "AI parsing failed";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    // LLM failed — fall back to basic regex parsing instead of returning 500
+    console.error("LLM parse failed, using basic parser:", error);
+
+    const batch = parseTasksBasic(
+      message,
+      users || [],
+      projects || []
+    );
+
+    return NextResponse.json({
+      success: true,
+      parsed: batch.tasks,
+      confidence: batch.confidence,
+      parser: "basic",
+    });
   }
 }

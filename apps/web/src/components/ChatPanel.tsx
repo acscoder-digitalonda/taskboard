@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { parseTaskInput, store } from "@/lib/store";
+import { store } from "@/lib/store";
 import { useUsers, useProjects } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api-client";
 import { getUserById, getProjectById } from "@/lib/utils";
@@ -106,14 +106,15 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
       const data = await res.json();
 
       if (data.success && data.parsed) {
-        setAiConnectedLocal(true);
+        // API always returns a result — either from AI or basic parser
+        const isAI = data.parser === "ai";
+        setAiConnectedLocal(isAI);
+
         const parsedArray: Partial<Task>[] = Array.isArray(data.parsed)
           ? data.parsed
           : [data.parsed];
 
-        // Apply defaults to each task — let AI's smart assignment stand in preview.
-        // If the AI matched a role (e.g. "development" for "fix bugs"), respect it.
-        // Only default to currentUserId at final creation time (handleCreate).
+        // Apply defaults — let AI's smart assignment stand in preview.
         const tasks = parsedArray.map((p: Partial<Task>) => ({
           ...p,
           assignee_id: p.assignee_id || undefined,
@@ -122,12 +123,9 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
         }));
 
         const confidence = data.confidence ?? 0;
-        const confidenceLabel =
-          confidence >= 0.8
-            ? "High confidence"
-            : confidence >= 0.5
-              ? "Medium confidence"
-              : "Low confidence";
+        const parserLabel = isAI
+          ? (confidence >= 0.8 ? "High confidence" : confidence >= 0.5 ? "Medium confidence" : "Low confidence")
+          : "Basic parsing";
 
         const taskLabel = tasks.length === 1
           ? "Here's what I've got"
@@ -136,7 +134,9 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
         const botMsg: ChatMessage = {
           id: "bot-" + Date.now(),
           role: "bot",
-          text: `✨ ${taskLabel} (${confidenceLabel}):`,
+          text: isAI
+            ? `✨ ${taskLabel} (${parserLabel}):`
+            : `${taskLabel} (${parserLabel} — AI unavailable):`,
           taskPreviews: tasks,
         };
 
@@ -152,26 +152,15 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
         throw new Error("Parse failed");
       }
     } catch {
-      // Fallback to regex parser — don't force currentUserId, let preview show "Unassigned"
+      // Only network/auth errors reach here — API handles LLM fallback server-side
       setAiConnectedLocal(false);
-      const parsed = parseTaskInput(text);
-      if (!parsed.status) parsed.status = "doing";
-      if (!parsed.priority) parsed.priority = 2;
-
       const botMsg: ChatMessage = {
         id: "bot-" + Date.now(),
         role: "bot",
-        text: "Here's what I've got (basic parsing — AI unavailable):",
-        taskPreviews: [parsed],
+        text: "Could not reach server. Check your connection and try again.",
       };
-
       setMessages((prev) =>
         prev.filter((m) => m.id !== thinkingId).concat(botMsg)
-      );
-      setPendingTasks([parsed]);
-      setOriginalInput(text);
-      setNotifyLevel(
-        parsed.assignee_id !== currentUserId ? "whatsapp" : "in_app"
       );
     } finally {
       setAiParsing(false);
