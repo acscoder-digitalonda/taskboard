@@ -67,6 +67,11 @@ function createSupabaseClient(): SupabaseClient {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      // Disable Navigator LockManager — it deadlocks in production (SDK Issue #1594).
+      // Safe because we bypass the SDK for all auth ops (localStorage reads, REST refresh).
+      lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<unknown>) => {
+        return await fn();
+      },
     },
   });
 
