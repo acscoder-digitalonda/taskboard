@@ -10,8 +10,6 @@ import {
 } from "@/lib/push";
 import { BellRing, X } from "lucide-react";
 
-const DISMISS_KEY = "tb-push-dismissed";
-
 /**
  * A dismissible banner prompting users to enable push notifications.
  *
@@ -19,22 +17,33 @@ const DISMISS_KEY = "tb-push-dismissed";
  * to be called from a user gesture (tap/click). setTimeout-based
  * auto-subscribe silently fails on iOS. This banner's "Enable" button
  * provides the required user gesture context.
+ *
+ * Dismiss key is per-user so switching accounts re-shows the banner.
  */
 export default function PushPromptBanner() {
-  const { session } = useAuth();
+  const { session, currentUser } = useAuth();
+  const userId = currentUser?.id;
   const [visible, setVisible] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
 
+  // Per-user dismiss key — each user gets their own banner state
+  const dismissKey = userId ? `tb-push-dismissed-${userId}` : null;
+
   useEffect(() => {
+    // Reset visibility when user changes
+    setVisible(false);
+
     async function check() {
+      if (!userId || !dismissKey) return;
+
       // Only show on browsers that support push
       if (!isPushSupported()) return;
 
       // Don't show if user already denied (they'd need to change browser settings)
       if (getPushPermission() === "denied") return;
 
-      // Don't show if user previously dismissed
-      if (localStorage.getItem(DISMISS_KEY)) return;
+      // Don't show if THIS user previously dismissed
+      if (localStorage.getItem(dismissKey)) return;
 
       // Don't show if already subscribed
       const active = await hasActivePushSubscription();
@@ -43,13 +52,13 @@ export default function PushPromptBanner() {
       setVisible(true);
     }
     check();
-  }, []);
+  }, [userId, dismissKey]);
 
   if (!visible) return null;
 
   async function handleEnable() {
     const token = session?.access_token;
-    if (!token) return;
+    if (!token || !dismissKey) return;
 
     setSubscribing(true);
     try {
@@ -58,9 +67,9 @@ export default function PushPromptBanner() {
         setVisible(false);
         return;
       }
-      // If permission was denied, hide and remember
+      // If permission was denied, hide and remember for this user
       if (getPushPermission() === "denied") {
-        localStorage.setItem(DISMISS_KEY, "denied");
+        localStorage.setItem(dismissKey, "denied");
         setVisible(false);
       }
     } finally {
@@ -69,7 +78,9 @@ export default function PushPromptBanner() {
   }
 
   function handleDismiss() {
-    localStorage.setItem(DISMISS_KEY, "1");
+    if (dismissKey) {
+      localStorage.setItem(dismissKey, "1");
+    }
     setVisible(false);
   }
 

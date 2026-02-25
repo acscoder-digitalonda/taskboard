@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useUsers } from "@/lib/hooks";
 import { useFocusTrap } from "@/lib/use-focus-trap";
+import { supabase } from "@/lib/supabase";
 import { UserRole } from "@/types";
-import { Users, X, Edit3, Check, Sparkles, AlertTriangle } from "lucide-react";
+import { Users, X, Edit3, Check, Sparkles, AlertTriangle, Bell, BellOff } from "lucide-react";
 
 interface TeamManagerProps {
   onClose: () => void;
@@ -43,6 +44,21 @@ export default function TeamManager({ onClose }: TeamManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<UserRole>("member");
   const [editDescription, setEditDescription] = useState("");
+
+  // Track which users have push subscriptions
+  const [pushUsers, setPushUsers] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    async function loadPushStatus() {
+      const { data } = await supabase
+        .from("push_subscriptions")
+        .select("user_id");
+      if (data) {
+        setPushUsers(new Set(data.map((d: { user_id: string }) => d.user_id)));
+      }
+    }
+    loadPushStatus();
+  }, []);
 
   const membersWithDefaultRole = users.filter(
     (u) => !u.role || u.role === "member"
@@ -209,6 +225,17 @@ export default function TeamManager({ onClose }: TeamManagerProps) {
                   >
                     {ROLE_OPTIONS.find((r) => r.value === (user.role || "member"))?.label || "Member"}
                   </span>
+
+                  {/* Push status */}
+                  {pushUsers.has(user.id) ? (
+                    <span title="Push notifications enabled" className="flex-shrink-0">
+                      <Bell size={12} className="text-green-500" />
+                    </span>
+                  ) : (
+                    <span title="No push — user needs to enable on their device" className="flex-shrink-0">
+                      <BellOff size={12} className="text-gray-300" />
+                    </span>
+                  )}
 
                   {/* Edit button */}
                   <button
