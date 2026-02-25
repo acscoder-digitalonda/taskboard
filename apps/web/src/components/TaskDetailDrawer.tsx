@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Task, TaskStatus, SECTION_PRESETS, FileAttachment } from "@/types";
 import { store } from "@/lib/store";
 import { useProjects, useUsers, useTaskGroupProgress } from "@/lib/hooks";
@@ -111,6 +111,135 @@ export default function TaskDetailDrawer({
 
   // Task group progress — null if not in a group or single-task group
   const groupProgress = useTaskGroupProgress(task?.group_id);
+
+  // ── Debounced edit notifications ──────────────────────────────
+  // Snapshot task state when drawer opens. After edits, send ONE
+  // batched "task_updated" notification to the assignee (2s debounce).
+  interface TaskBaseline {
+    title: string;
+    assignee_id: string;
+    status: TaskStatus;
+    priority: number;
+    due_at?: string;
+    project_id?: string;
+    client?: string;
+    noteCount: number;
+    sectionCount: number;
+    sectionContent: string; // concatenated for change detection
+  }
+
+  function snapshotTask(t: Task): TaskBaseline {
+    return {
+      title: t.title,
+      assignee_id: t.assignee_id,
+      status: t.status,
+      priority: t.priority,
+      due_at: t.due_at,
+      project_id: t.project_id,
+      client: t.client,
+      noteCount: t.notes?.length || 0,
+      sectionCount: t.sections?.length || 0,
+      sectionContent: t.sections?.map((s) => `${s.heading}:${s.content}`).join("|") || "",
+    };
+  }
+
+  const baselineRef = useRef<TaskBaseline | null>(null);
+  const notifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingChangesRef = useRef<string[]>([]);
+
+  // Capture baseline when a new task opens
+  useEffect(() => {
+    if (task) {
+      baselineRef.current = snapshotTask(task);
+      pendingChangesRef.current = [];
+    }
+    return () => {
+      // Flush pending notification when drawer closes / task changes
+      if (notifyTimerRef.current) {
+        clearTimeout(notifyTimerRef.current);
+        notifyTimerRef.current = null;
+      }
+      if (pendingChangesRef.current.length > 0 && baselineRef.current && task) {
+        const assigneeId = task.assignee_id;
+        const changerName = getUserById(currentUserId || "")?.name || "Someone";
+        const changes = [...pendingChangesRef.current];
+        pendingChangesRef.current = [];
+        apiFetch("/api/notifications/send", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: assigneeId,
+            type: "task_updated",
+            title: `Task updated: ${task.title}`,
+            body: `${changerName} changed: ${changes.join(", ")}`,
+            link: `/tasks/${task.id}`,
+            reference_id: task.id,
+            reference_type: "task",
+            priority: task.priority,
+          }),
+        }).catch(() => {});
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.id]);
+
+  // Watch for changes and send debounced notification
+  useEffect(() => {
+    if (!task || !baselineRef.current || !currentUserId) return;
+    const baseline = baselineRef.current;
+
+    // Compute diff
+    const changes: string[] = [];
+    if (task.title !== baseline.title) changes.push("title");
+    if (task.status !== baseline.status) changes.push(`status → ${STATUS_LABELS[task.status]}`);
+    if (task.priority !== baseline.priority) changes.push(`priority → P${task.priority}`);
+    if (task.due_at !== baseline.due_at) changes.push("due date");
+    if (task.project_id !== baseline.project_id) changes.push("project");
+    if (task.client !== baseline.client) changes.push("client");
+    if ((task.notes?.length || 0) !== baseline.noteCount) changes.push("notes");
+    if ((task.sections?.length || 0) !== baseline.sectionCount) changes.push("sections");
+    const currentSectionContent = task.sections?.map((s) => `${s.heading}:${s.content}`).join("|") || "";
+    if (currentSectionContent !== baseline.sectionContent && !changes.includes("sections")) {
+      changes.push("section content");
+    }
+
+    if (changes.length === 0) return;
+
+    // Store pending changes for flush-on-close
+    pendingChangesRef.current = changes;
+
+    // Clear previous timer
+    if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
+
+    // Debounce: send after 2 seconds of quiet
+    notifyTimerRef.current = setTimeout(() => {
+      const changerName = getUserById(currentUserId)?.name || "Someone";
+      apiFetch("/api/notifications/send", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: task.assignee_id,
+          type: "task_updated",
+          title: `Task updated: ${task.title}`,
+          body: `${changerName} changed: ${changes.join(", ")}`,
+          link: `/tasks/${task.id}`,
+          reference_id: task.id,
+          reference_type: "task",
+          priority: task.priority,
+        }),
+      }).catch(() => {});
+
+      // Reset baseline so subsequent edits don't re-notify for same changes
+      baselineRef.current = snapshotTask(task);
+      pendingChangesRef.current = [];
+      notifyTimerRef.current = null;
+    }, 2000);
+
+    return () => {
+      if (notifyTimerRef.current) {
+        clearTimeout(notifyTimerRef.current);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.title, task?.status, task?.priority, task?.due_at, task?.project_id, task?.client, task?.assignee_id, task?.notes?.length, task?.sections?.length, task?.sections?.map((s) => s.content).join("|"), currentUserId]);
 
   if (!task) return null;
 
