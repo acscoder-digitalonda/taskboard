@@ -157,6 +157,44 @@ function AppShell() {
     }
   }, []);
 
+  // Auto-subscribe to push notifications after login
+  // The push system is opt-in only (hidden in settings) so nobody ever enabled it.
+  // This auto-triggers the browser "Allow notifications?" dialog after login,
+  // storing the subscription in push_subscriptions so sendPushToUser() works.
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    async function autoSubscribePush() {
+      try {
+        const { isPushSupported, hasActivePushSubscription, subscribeToPush } =
+          await import("@/lib/push");
+        const { getAccessTokenFromStorage } = await import("@/lib/supabase");
+
+        if (!isPushSupported()) return;
+
+        // Don't re-prompt if already subscribed in this browser
+        const alreadySubscribed = await hasActivePushSubscription();
+        if (alreadySubscribed) return;
+
+        // Don't prompt if user already denied (browser remembers)
+        if (Notification.permission === "denied") return;
+
+        // Get token from localStorage (bypasses SDK hang)
+        const token = getAccessTokenFromStorage();
+        if (!token) return;
+
+        // Auto-subscribe — triggers browser permission dialog
+        await subscribeToPush(token);
+      } catch (err) {
+        console.error("Auto push subscribe failed:", err);
+      }
+    }
+
+    // Small delay to let the app settle before prompting
+    const timer = setTimeout(autoSubscribePush, 3000);
+    return () => clearTimeout(timer);
+  }, [currentUserId]);
+
   // Check AI availability on mount
   useEffect(() => {
     async function checkAI() {
