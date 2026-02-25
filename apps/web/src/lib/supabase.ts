@@ -69,7 +69,8 @@ function createSupabaseClient(): SupabaseClient {
       detectSessionInUrl: true,
       // Disable Navigator LockManager — it deadlocks in production (SDK Issue #1594).
       // Safe because we bypass the SDK for all auth ops (localStorage reads, REST refresh).
-      lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      lock: async (_name: string, _acquireTimeout: number, fn: () => any) => {
         return await fn();
       },
     },
