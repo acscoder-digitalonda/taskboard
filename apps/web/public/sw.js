@@ -59,7 +59,10 @@ self.addEventListener("push", (event) => {
 
   try {
     const payload = event.data.json();
-    const { title, body, link, icon } = payload;
+    const { title, body, link, icon, id } = payload;
+
+    // Use unique tag per notification so multiple can show simultaneously
+    const notificationTag = id || `tb-${Date.now()}`;
 
     event.waitUntil(
       self.registration.showNotification(title || "TaskBoard", {
@@ -67,7 +70,7 @@ self.addEventListener("push", (event) => {
         icon: icon || "/icons/icon-192.png",
         badge: "/icons/icon-192.png",
         data: { link: link || "/" },
-        tag: "taskboard-notification",
+        tag: notificationTag,
         renotify: true,
       })
     );

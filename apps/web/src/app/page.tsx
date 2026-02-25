@@ -15,6 +15,7 @@ import FilterBar from "@/components/FilterBar";
 import TaskDetailDrawer from "@/components/TaskDetailDrawer";
 import ProjectManager from "@/components/ProjectManager";
 import TeamManager from "@/components/TeamManager";
+import PushPromptBanner from "@/components/PushPromptBanner";
 import SearchPanel from "@/components/SearchPanel";
 import NotificationBell from "@/components/NotificationBell";
 import Toast from "@/components/Toast";
@@ -160,43 +161,9 @@ function AppShell() {
     }
   }, []);
 
-  // Auto-subscribe to push notifications after login
-  // The push system is opt-in only (hidden in settings) so nobody ever enabled it.
-  // This auto-triggers the browser "Allow notifications?" dialog after login,
-  // storing the subscription in push_subscriptions so sendPushToUser() works.
-  useEffect(() => {
-    if (!currentUserId) return;
-
-    async function autoSubscribePush() {
-      try {
-        const { isPushSupported, hasActivePushSubscription, subscribeToPush } =
-          await import("@/lib/push");
-        const { getAccessTokenFromStorage } = await import("@/lib/supabase");
-
-        if (!isPushSupported()) return;
-
-        // Don't re-prompt if already subscribed in this browser
-        const alreadySubscribed = await hasActivePushSubscription();
-        if (alreadySubscribed) return;
-
-        // Don't prompt if user already denied (browser remembers)
-        if (Notification.permission === "denied") return;
-
-        // Get token from localStorage (bypasses SDK hang)
-        const token = getAccessTokenFromStorage();
-        if (!token) return;
-
-        // Auto-subscribe — triggers browser permission dialog
-        await subscribeToPush(token);
-      } catch (err) {
-        console.error("Auto push subscribe failed:", err);
-      }
-    }
-
-    // Small delay to let the app settle before prompting
-    const timer = setTimeout(autoSubscribePush, 3000);
-    return () => clearTimeout(timer);
-  }, [currentUserId]);
+  // Push notifications are handled by <PushPromptBanner /> which uses a
+  // user gesture (tap) to trigger Notification.requestPermission().
+  // This is required for iOS 16.4+ PWA push support.
 
   // Check AI availability on mount
   useEffect(() => {
@@ -312,6 +279,9 @@ function AppShell() {
           </div>
         </div>
       </header>
+
+      {/* Push notification enable banner (iOS requires user gesture) */}
+      <PushPromptBanner />
 
       {/* Main content */}
       <main className="max-w-[1600px] mx-auto px-3 sm:px-6 py-4 sm:py-6">

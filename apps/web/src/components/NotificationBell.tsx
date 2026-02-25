@@ -4,6 +4,11 @@ import { useSyncExternalStore, useState, useRef, useEffect } from "react";
 import { notificationStore } from "@/lib/notifications";
 import { Notification } from "@/types";
 import {
+  isPushSupported,
+  getPushPermission,
+  hasActivePushSubscription,
+} from "@/lib/push";
+import {
   Bell,
   X,
   CheckCircle2,
@@ -27,6 +32,7 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
   );
   const unreadCount = notificationStore.getUnreadCount();
   const [open, setOpen] = useState(false);
+  const [pushActive, setPushActive] = useState<boolean | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -39,6 +45,13 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
     if (open) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
+
+  // Check push subscription status
+  useEffect(() => {
+    if (isPushSupported()) {
+      hasActivePushSubscription().then(setPushActive);
+    }
+  }, []);
 
   const typeIcon: Record<string, React.ReactNode> = {
     task_assigned: <UserPlus size={14} className="text-cyan-500" />,
@@ -77,6 +90,13 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
           <span className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-magenta-500 text-white text-xs font-bold flex items-center justify-center">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
+        )}
+        {/* Push not enabled hint — yellow dot when no unread badges */}
+        {unreadCount === 0 && pushActive === false && isPushSupported() && getPushPermission() !== "denied" && (
+          <span
+            className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-yellow-400 border-2 border-white"
+            title="Push notifications not enabled"
+          />
         )}
       </button>
 

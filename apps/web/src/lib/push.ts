@@ -43,9 +43,18 @@ export async function subscribeToPush(authToken: string): Promise<boolean> {
     if (permission !== "granted") return false;
 
     const registration = await navigator.serviceWorker.ready;
+    // Create a fresh copy so .buffer exactly matches the typed array length.
+    // This avoids issues on iOS Safari where .buffer could be larger than the view.
+    // Create a fresh ArrayBuffer copy so the buffer exactly matches the key length.
+    // Using .slice() + cast avoids iOS Safari issues with oversized underlying buffers.
+    const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+    const applicationServerKey = keyBytes.buffer.slice(
+      keyBytes.byteOffset,
+      keyBytes.byteOffset + keyBytes.byteLength
+    ) as ArrayBuffer;
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY).buffer as ArrayBuffer,
+      applicationServerKey,
     });
 
     const json = subscription.toJSON();

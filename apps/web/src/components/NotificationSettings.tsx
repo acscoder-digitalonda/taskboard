@@ -302,6 +302,32 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
                 <p className="text-[10px] text-gray-400">
                   Get notified on this device when tasks are assigned to you
                 </p>
+                {pushEnabled && pushPermission === "granted" && (
+                  <button
+                    onClick={async () => {
+                      if (!session?.access_token) return;
+                      try {
+                        const res = await fetch("/api/notifications/test", {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${session.access_token}`,
+                          },
+                        });
+                        const data = await res.json();
+                        if (data.devices_reached > 0) {
+                          alert("Test notification sent! Check your notifications.");
+                        } else {
+                          alert("No push subscriptions found. Try toggling push off and on again.");
+                        }
+                      } catch {
+                        alert("Failed to send test notification.");
+                      }
+                    }}
+                    className="mt-1 text-xs font-medium text-cyan-600 hover:text-cyan-700 underline underline-offset-2"
+                  >
+                    Send test notification
+                  </button>
+                )}
               </div>
             </div>
           )}
