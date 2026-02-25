@@ -23,7 +23,7 @@ export default function ChannelList({
   onNewDM,
 }: ChannelListProps) {
   const { channels } = useChannels(userId);
-  const users = useUsers();
+  const { users } = useUsers();
   const [search, setSearch] = useState("");
 
   // Fetch members for DM channels to resolve names

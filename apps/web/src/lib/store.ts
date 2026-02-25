@@ -682,6 +682,38 @@ export const store = {
     return () => userListeners.delete(fn);
   },
 
+  updateUser: (id: string, updates: Partial<User>) => {
+    const prev = users.find((u) => u.id === id);
+    users = users.map((u) =>
+      u.id === id ? { ...u, ...updates } : u
+    );
+    emitUsers();
+
+    (async () => {
+      // Strip client-only fields before sending to DB
+      const { id: _id, initials: _initials, ...rest } = updates;
+      const dbUpdates: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rest)) {
+        if (value !== undefined) dbUpdates[key] = value;
+      }
+
+      if (Object.keys(dbUpdates).length > 0) {
+        const { error } = await supabase
+          .from("users")
+          .update(dbUpdates)
+          .eq("id", id);
+        if (error) {
+          console.error("Error updating user:", error);
+          if (prev) {
+            users = users.map((u) => (u.id === id ? prev : u));
+            emitUsers();
+          }
+          storeErrorEmitter.emit("Failed to update user role");
+        }
+      }
+    })();
+  },
+
   // --- Task Groups ---
   getTaskGroups: () => taskGroups,
 

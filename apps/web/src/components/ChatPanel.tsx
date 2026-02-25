@@ -40,7 +40,7 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp }: ChatPanelProps) {
-  const users = useUsers();
+  const { users } = useUsers();
   const { projects } = useProjects();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -152,10 +152,9 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
         throw new Error("Parse failed");
       }
     } catch {
-      // Fallback to regex parser
+      // Fallback to regex parser — don't force currentUserId, let preview show "Unassigned"
       setAiConnectedLocal(false);
       const parsed = parseTaskInput(text);
-      if (!parsed.assignee_id) parsed.assignee_id = currentUserId;
       if (!parsed.status) parsed.status = "doing";
       if (!parsed.priority) parsed.priority = 2;
 
@@ -378,8 +377,8 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                                 {getUserById(preview.assignee_id)?.name}
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-gray-400 bg-gray-100">
-                                Unassigned
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-amber-600 bg-amber-50 border border-dashed border-amber-200">
+                                Unassigned — defaults to you
                               </span>
                             )}
                             {preview.project_id && (

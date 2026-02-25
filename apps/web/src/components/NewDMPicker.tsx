@@ -12,7 +12,7 @@ interface NewDMPickerProps {
 }
 
 export default function NewDMPicker({ userId, onSelect, onCancel }: NewDMPickerProps) {
-  const users = useUsers();
+  const { users } = useUsers();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
 

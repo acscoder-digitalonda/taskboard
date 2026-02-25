@@ -57,7 +57,11 @@ export function useMyDayTasks(userId: string) {
 }
 
 export function useUsers() {
-  return useSyncExternalStore(store.subscribeUsers, store.getUsers, store.getUsers);
+  const users = useSyncExternalStore(store.subscribeUsers, store.getUsers, store.getUsers);
+  return {
+    users,
+    updateUser: store.updateUser,
+  };
 }
 
 export function useProjects() {

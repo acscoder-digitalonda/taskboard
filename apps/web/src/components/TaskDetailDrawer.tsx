@@ -51,7 +51,7 @@ export default function TaskDetailDrawer({
   currentUserId,
 }: TaskDetailDrawerProps) {
   const { projects } = useProjects();
-  const users = useUsers();
+  const { users } = useUsers();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
   const [editingClient, setEditingClient] = useState(false);

@@ -13,7 +13,7 @@ interface NewChannelFormProps {
 }
 
 export default function NewChannelForm({ userId, onCreated, onCancel }: NewChannelFormProps) {
-  const users = useUsers();
+  const { users } = useUsers();
   const { projects } = useProjects();
   const [name, setName] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);

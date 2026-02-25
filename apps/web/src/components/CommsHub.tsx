@@ -82,7 +82,7 @@ export default function CommsHub({ onOpenChannel, onOpenTask }: CommsHubProps) {
   const { currentUser } = useAuth();
   const { projects } = useProjects();
   const { tasks } = useTasks();
-  const users = useUsers();
+  const { users } = useUsers();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [projectFiles, setProjectFiles] = useState<Map<string, FileAttachment[]>>(new Map());
   const [projectChannels, setProjectChannels] = useState<Map<string, Channel[]>>(new Map());

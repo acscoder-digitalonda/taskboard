@@ -23,7 +23,7 @@ export default function FilterBar({
   setStatusFilter,
 }: FilterBarProps) {
   const { projects } = useProjects();
-  const users = useUsers();
+  const { users } = useUsers();
   const hasFilters = assigneeFilter || projectFilter || statusFilter;
 
   return (

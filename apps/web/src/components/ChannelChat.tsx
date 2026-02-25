@@ -53,7 +53,7 @@ export default function ChannelChat({ channelId, userId, onBack }: ChannelChatPr
     toggleReaction,
   } = useMessages(channelId, userId);
   const members = useChannelMembers(channelId);
-  const users = useUsers();
+  const { users } = useUsers();
   const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);

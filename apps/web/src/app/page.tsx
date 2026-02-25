@@ -14,6 +14,7 @@ import ChatPanel from "@/components/ChatPanel";
 import FilterBar from "@/components/FilterBar";
 import TaskDetailDrawer from "@/components/TaskDetailDrawer";
 import ProjectManager from "@/components/ProjectManager";
+import TeamManager from "@/components/TeamManager";
 import SearchPanel from "@/components/SearchPanel";
 import NotificationBell from "@/components/NotificationBell";
 import Toast from "@/components/Toast";
@@ -27,6 +28,7 @@ import {
   FolderOpen,
   MessageSquare,
   Search,
+  Users,
 } from "lucide-react";
 
 export default function Home() {
@@ -85,6 +87,7 @@ function AppShell() {
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showProjectManager, setShowProjectManager] = useState(false);
+  const [showTeamManager, setShowTeamManager] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingIsAutoShown, setOnboardingIsAutoShown] = useState(false);
@@ -283,6 +286,16 @@ function AppShell() {
               <span className="hidden md:inline">Projects</span>
             </button>
 
+            {/* Team Roles */}
+            <button
+              onClick={() => setShowTeamManager(true)}
+              className="p-2 sm:px-3 sm:py-2 bg-gray-50 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors flex items-center gap-1.5"
+              title="Team"
+            >
+              <Users size={15} />
+              <span className="hidden md:inline">Team</span>
+            </button>
+
             <span className="hidden lg:inline text-sm font-bold text-gray-600">
               {user.name}
             </span>
@@ -373,6 +386,11 @@ function AppShell() {
       {/* Project Manager Modal */}
       {showProjectManager && (
         <ProjectManager onClose={() => setShowProjectManager(false)} currentUserId={currentUserId} />
+      )}
+
+      {/* Team Manager Modal */}
+      {showTeamManager && (
+        <TeamManager onClose={() => setShowTeamManager(false)} />
       )}
 
       {/* Search Modal */}
