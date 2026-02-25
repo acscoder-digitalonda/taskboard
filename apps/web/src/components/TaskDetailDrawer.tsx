@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Task, TaskStatus, SECTION_PRESETS, FileAttachment } from "@/types";
+import { Task, TaskStatus, SECTION_PRESETS, FileAttachment, NotificationType } from "@/types";
 import { store } from "@/lib/store";
 import { useProjects, useUsers, useTaskGroupProgress } from "@/lib/hooks";
 import { useFocusTrap } from "@/lib/use-focus-trap";
@@ -89,6 +89,34 @@ export default function TaskDetailDrawer({
       setTaskFiles((prev) => prev.filter((f) => f.id !== file.id));
     }
   }, []);
+
+  /**
+   * Send a push notification to a task's assignee when a field changes.
+   * Skips if the assignee is the current user (no self-notifications).
+   */
+  const notifyTaskUpdate = useCallback(
+    (
+      assigneeId: string | undefined,
+      type: NotificationType,
+      title: string,
+      body: string
+    ) => {
+      if (!assigneeId || assigneeId === currentUserId || !task?.id) return;
+      apiFetch("/api/notifications/send", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: assigneeId,
+          type,
+          title,
+          body,
+          link: `/tasks/${task.id}`,
+          reference_id: task.id,
+          reference_type: "task",
+        }),
+      }).catch((err) => console.error("Notification failed:", err));
+    },
+    [currentUserId, task?.id]
+  );
 
   // M4: Lock body scroll while drawer is open
   useEffect(() => {
@@ -611,28 +639,16 @@ export default function TaskDetailDrawer({
                   const oldAssignee = task.assignee_id;
                   store.updateTask(task.id, { assignee_id: newAssignee });
 
-                  // Send notification if assignee changed (including self-assign)
-                  if (newAssignee !== oldAssignee) {
-                    apiFetch("/api/notifications/send", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        user_id: newAssignee,
-                        type: "task_assigned",
-                        title: `Task assigned: ${task.title}`,
-                        body: `${getUserById(currentUserId || "")?.name || "Someone"} assigned you a task`,
-                        link: `/tasks/${task.id}`,
-                        reference_id: task.id,
-                        reference_type: "task",
-                        priority: task.priority,
-                      }),
-                    }).then(async (res) => {
-                      if (res.ok) {
-                        try {
-                          const { notification } = await res.json();
-                          if (notification) notificationStore.addLocalNotification(notification);
-                        } catch { /* not critical */ }
-                      }
-                    }).catch(() => {});
+                  const actorName = getUserById(currentUserId || "")?.name || "Someone";
+
+                  // Notify new assignee
+                  if (newAssignee !== oldAssignee && newAssignee !== currentUserId) {
+                    notifyTaskUpdate(
+                      newAssignee,
+                      "task_assigned",
+                      `Task assigned: ${task.title}`,
+                      `${actorName} assigned you a task`
+                    );
                   }
                 }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
@@ -681,11 +697,24 @@ export default function TaskDetailDrawer({
               </div>
               <select
                 value={task.status}
-                onChange={(e) =>
-                  store.updateTask(task.id, {
-                    status: e.target.value as TaskStatus,
-                  })
-                }
+                onChange={(e) => {
+                  const newStatus = e.target.value as TaskStatus;
+                  const oldStatus = task.status;
+                  store.updateTask(task.id, { status: newStatus });
+
+                  if (newStatus !== oldStatus) {
+                    const actorName = getUserById(currentUserId || "")?.name || "Someone";
+                    const type = newStatus === "done" ? "task_completed" : "task_updated";
+                    notifyTaskUpdate(
+                      task.assignee_id,
+                      type,
+                      newStatus === "done"
+                        ? `Task completed: ${task.title}`
+                        : `Task status changed: ${task.title}`,
+                      `${actorName} changed status to ${STATUS_LABELS[newStatus]}`
+                    );
+                  }
+                }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               >
                 {(["backlog", "doing", "waiting", "done"] as TaskStatus[]).map(
@@ -708,11 +737,22 @@ export default function TaskDetailDrawer({
               </div>
               <select
                 value={task.priority}
-                onChange={(e) =>
-                  store.updateTask(task.id, {
-                    priority: parseInt(e.target.value),
-                  })
-                }
+                onChange={(e) => {
+                  const newPriority = parseInt(e.target.value);
+                  const oldPriority = task.priority;
+                  store.updateTask(task.id, { priority: newPriority });
+
+                  if (newPriority !== oldPriority) {
+                    const actorName = getUserById(currentUserId || "")?.name || "Someone";
+                    const labels = ["", "P1 — Urgent", "P2 — High", "P3 — Normal", "P4 — Low"];
+                    notifyTaskUpdate(
+                      task.assignee_id,
+                      "task_updated",
+                      `Task priority changed: ${task.title}`,
+                      `${actorName} changed priority to ${labels[newPriority] || `P${newPriority}`}`
+                    );
+                  }
+                }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               >
                 <option value={1}>P1 — Urgent</option>
@@ -737,13 +777,22 @@ export default function TaskDetailDrawer({
                     ? new Date(task.due_at).toISOString().slice(0, 16)
                     : ""
                 }
-                onChange={(e) =>
-                  store.updateTask(task.id, {
-                    due_at: e.target.value
-                      ? new Date(e.target.value).toISOString()
-                      : undefined,
-                  })
-                }
+                onChange={(e) => {
+                  const newDue = e.target.value
+                    ? new Date(e.target.value).toISOString()
+                    : undefined;
+                  store.updateTask(task.id, { due_at: newDue });
+
+                  const actorName = getUserById(currentUserId || "")?.name || "Someone";
+                  notifyTaskUpdate(
+                    task.assignee_id,
+                    "task_updated",
+                    `Due date updated: ${task.title}`,
+                    newDue
+                      ? `${actorName} set due date to ${new Date(newDue).toLocaleDateString()}`
+                      : `${actorName} removed the due date`
+                  );
+                }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               />
             </div>
