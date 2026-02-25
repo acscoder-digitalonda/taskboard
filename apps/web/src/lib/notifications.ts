@@ -1,6 +1,7 @@
 "use client";
 
 import { Notification } from "@/types";
+import { apiFetch } from "./api-client";
 import { supabase } from "./supabase";
 
 type Listener = () => void;
@@ -13,38 +14,24 @@ function emit() {
   listeners.forEach((fn) => fn());
 }
 
-// ---- Fetch ----
+// ---- Fetch (via server API — bypasses RLS) ----
 
 async function fetchNotifications(userId: string): Promise<Notification[]> {
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  if (error) {
-    console.error("Error fetching notifications:", error);
+  try {
+    const res = await apiFetch("/api/notifications");
+    if (!res.ok) {
+      console.error("fetchNotifications: API returned", res.status);
+      return [];
+    }
+    const { notifications: data } = await res.json();
+    return (data || []) as Notification[];
+  } catch (err) {
+    console.error("fetchNotifications error:", err);
     return [];
   }
-
-  return (data || []).map((n) => ({
-    id: n.id,
-    user_id: n.user_id,
-    type: n.type,
-    title: n.title,
-    body: n.body,
-    link: n.link,
-    read_at: n.read_at,
-    channel: n.channel,
-    delivered_at: n.delivered_at,
-    reference_id: n.reference_id,
-    reference_type: n.reference_type,
-    created_at: n.created_at,
-  }));
 }
 
-// ---- Realtime ----
+// ---- Realtime (best-effort, polling covers failures) ----
 
 let notifChannel: ReturnType<typeof supabase.channel> | null = null;
 
@@ -63,12 +50,53 @@ function setupNotifRealtime(userId: string) {
       },
       (payload) => {
         const newNotif = payload.new as Notification;
-        notifications = [newNotif, ...notifications];
-        unreadCount = notifications.filter((n) => !n.read_at).length;
-        emit();
+        // Deduplicate — the notification might already exist from addLocalNotification
+        if (!notifications.some((n) => n.id === newNotif.id)) {
+          notifications = [newNotif, ...notifications];
+          unreadCount = notifications.filter((n) => !n.read_at).length;
+          emit();
+        }
       }
     )
     .subscribe();
+}
+
+// ---- Polling fallback (catches anything realtime misses) ----
+
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+function startPolling(userId: string) {
+  if (pollInterval) return;
+  pollInterval = setInterval(async () => {
+    try {
+      const fresh = await fetchNotifications(userId);
+      if (fresh.length === 0 && notifications.length === 0) return;
+
+      // Check if there are any new notifications we don't have locally
+      const localIds = new Set(notifications.map((n) => n.id));
+      const hasNew = fresh.some((n) => !localIds.has(n.id));
+      // Check if any read_at status changed (e.g., marked read on another device)
+      const hasReadChanges = fresh.some((n) => {
+        const local = notifications.find((l) => l.id === n.id);
+        return local && local.read_at !== n.read_at;
+      });
+
+      if (hasNew || hasReadChanges || fresh.length !== notifications.length) {
+        notifications = fresh;
+        unreadCount = fresh.filter((n) => !n.read_at).length;
+        emit();
+      }
+    } catch {
+      // Silent — polling is a fallback, don't spam errors
+    }
+  }, 30_000); // Every 30 seconds
+}
+
+function stopPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
 }
 
 // ---- Init ----
@@ -83,6 +111,7 @@ async function initNotifications(userId: string) {
     unreadCount = notifications.filter((n) => !n.read_at).length;
     emit();
     setupNotifRealtime(userId);
+    startPolling(userId);
   } catch (err) {
     console.error("Failed to init notifications:", err);
     initUserId = null; // Allow retry
@@ -103,17 +132,37 @@ export const notificationStore = {
     return () => listeners.delete(fn);
   },
 
+  /**
+   * Instantly add a notification to the local store.
+   * Called by ChatPanel/TaskDetailDrawer after successfully creating
+   * a notification via the API — provides instant bell badge update
+   * without waiting for realtime or polling.
+   */
+  addLocalNotification: (notif: Notification) => {
+    // Deduplicate
+    if (notifications.some((n) => n.id === notif.id)) return;
+    notifications = [notif, ...notifications];
+    unreadCount = notifications.filter((n) => !n.read_at).length;
+    emit();
+  },
+
   markAsRead: async (notifId: string) => {
+    // Optimistic local update
     notifications = notifications.map((n) =>
       n.id === notifId ? { ...n, read_at: new Date().toISOString() } : n
     );
     unreadCount = notifications.filter((n) => !n.read_at).length;
     emit();
 
-    await supabase
-      .from("notifications")
-      .update({ read_at: new Date().toISOString() })
-      .eq("id", notifId);
+    // Persist via server API (bypasses RLS)
+    try {
+      await apiFetch("/api/notifications", {
+        method: "PATCH",
+        body: JSON.stringify({ notification_id: notifId }),
+      });
+    } catch (err) {
+      console.error("markAsRead API error:", err);
+    }
   },
 
   markAllAsRead: async (userId: string) => {
@@ -124,11 +173,15 @@ export const notificationStore = {
     unreadCount = 0;
     emit();
 
-    await supabase
-      .from("notifications")
-      .update({ read_at: now })
-      .eq("user_id", userId)
-      .is("read_at", null);
+    // Persist via server API (bypasses RLS)
+    try {
+      await apiFetch("/api/notifications", {
+        method: "PATCH",
+        body: JSON.stringify({ mark_all: true }),
+      });
+    } catch (err) {
+      console.error("markAllAsRead API error:", err);
+    }
   },
 
   // Create a notification (called by API routes or OpenClaw)
@@ -149,6 +202,7 @@ export const notificationStore = {
   cleanup: () => {
     if (notifChannel) supabase.removeChannel(notifChannel);
     notifChannel = null;
+    stopPolling();
     initUserId = null;
     notifications = [];
     unreadCount = 0;

@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { getTaskFiles, deleteFile } from "@/lib/files";
 import { apiFetch } from "@/lib/api-client";
+import { notificationStore } from "@/lib/notifications";
 import FileUploadZone from "./FileUploadZone";
 import FileList from "./FileList";
 
@@ -176,6 +177,13 @@ export default function TaskDetailDrawer({
             reference_type: "task",
             priority: task.priority,
           }),
+        }).then(async (res) => {
+          if (res.ok) {
+            try {
+              const { notification } = await res.json();
+              if (notification) notificationStore.addLocalNotification(notification);
+            } catch { /* not critical */ }
+          }
         }).catch(() => {});
       }
     };
@@ -211,21 +219,30 @@ export default function TaskDetailDrawer({
     if (notifyTimerRef.current) clearTimeout(notifyTimerRef.current);
 
     // Debounce: send after 2 seconds of quiet
-    notifyTimerRef.current = setTimeout(() => {
+    notifyTimerRef.current = setTimeout(async () => {
       const changerName = getUserById(currentUserId)?.name || "Someone";
-      apiFetch("/api/notifications/send", {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: task.assignee_id,
-          type: "task_updated",
-          title: `Task updated: ${task.title}`,
-          body: `${changerName} changed: ${changes.join(", ")}`,
-          link: `/tasks/${task.id}`,
-          reference_id: task.id,
-          reference_type: "task",
-          priority: task.priority,
-        }),
-      }).catch(() => {});
+      try {
+        const res = await apiFetch("/api/notifications/send", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: task.assignee_id,
+            type: "task_updated",
+            title: `Task updated: ${task.title}`,
+            body: `${changerName} changed: ${changes.join(", ")}`,
+            link: `/tasks/${task.id}`,
+            reference_id: task.id,
+            reference_type: "task",
+            priority: task.priority,
+          }),
+        });
+        // Inject into local store for instant bell update
+        if (res.ok) {
+          try {
+            const { notification } = await res.json();
+            if (notification) notificationStore.addLocalNotification(notification);
+          } catch { /* not critical */ }
+        }
+      } catch { /* silent */ }
 
       // Reset baseline so subsequent edits don't re-notify for same changes
       baselineRef.current = snapshotTask(task);
@@ -608,6 +625,13 @@ export default function TaskDetailDrawer({
                         reference_type: "task",
                         priority: task.priority,
                       }),
+                    }).then(async (res) => {
+                      if (res.ok) {
+                        try {
+                          const { notification } = await res.json();
+                          if (notification) notificationStore.addLocalNotification(notification);
+                        } catch { /* not critical */ }
+                      }
                     }).catch(() => {});
                   }
                 }}

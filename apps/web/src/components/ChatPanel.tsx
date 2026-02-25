@@ -5,6 +5,7 @@ import { parseTaskInput, store } from "@/lib/store";
 import { useUsers, useProjects } from "@/lib/hooks";
 import { apiFetch } from "@/lib/api-client";
 import { getUserById, getProjectById } from "@/lib/utils";
+import { notificationStore } from "@/lib/notifications";
 import { Task, TaskStatus } from "@/types";
 import {
   Send,
@@ -110,10 +111,12 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
           ? data.parsed
           : [data.parsed];
 
-        // Apply defaults to each task
+        // Apply defaults to each task — let AI's smart assignment stand in preview.
+        // If the AI matched a role (e.g. "development" for "fix bugs"), respect it.
+        // Only default to currentUserId at final creation time (handleCreate).
         const tasks = parsedArray.map((p: Partial<Task>) => ({
           ...p,
-          assignee_id: p.assignee_id || currentUserId,
+          assignee_id: p.assignee_id || undefined,
           status: p.status || "doing",
           priority: p.priority || 3,
         }));
@@ -143,7 +146,7 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
         setPendingTasks(tasks);
         setOriginalInput(text);
         setNotifyLevel(
-          tasks.some((t: Partial<Task>) => t.assignee_id !== currentUserId) ? "whatsapp" : "in_app"
+          tasks.some((t: Partial<Task>) => t.assignee_id && t.assignee_id !== currentUserId) ? "whatsapp" : "in_app"
         );
       } else {
         throw new Error("Parse failed");
@@ -217,8 +220,9 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
     // The API endpoint handles delivery channels: in-app always, WhatsApp for P1,
     // PWA push for others — based on user preferences and quiet hours.
     for (const task of createdTasks) {
+      if (!task.assignee_id) continue; // No assignee = no notification
       try {
-        await apiFetch("/api/notifications/send", {
+        const notifRes = await apiFetch("/api/notifications/send", {
           method: "POST",
           body: JSON.stringify({
             user_id: task.assignee_id,
@@ -231,6 +235,17 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
             priority: task.priority,
           }),
         });
+        // Inject notification into local store for instant bell update
+        if (notifRes.ok) {
+          try {
+            const { notification } = await notifRes.json();
+            if (notification) {
+              notificationStore.addLocalNotification(notification);
+            }
+          } catch {
+            // Response already consumed or not JSON — not critical
+          }
+        }
       } catch (err) {
         console.error("Failed to send notification:", err);
       }
@@ -242,7 +257,7 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
     else if (notifyLevel === "in_app") notifyLabel = " 🔔 Notification sent.";
 
     const confirmText = createdTasks.length === 1
-      ? `✅ Created "${createdTasks[0].title}" and assigned to ${getUserById(createdTasks[0].assignee_id)?.name || "Unknown"}.${notifyLabel} Ready for another!`
+      ? `✅ Created "${createdTasks[0].title}"${createdTasks[0].assignee_id ? ` and assigned to ${getUserById(createdTasks[0].assignee_id)?.name || "Unknown"}` : ""}.${notifyLabel} Ready for another!`
       : `✅ Created ${createdTasks.length} tasks.${notifyLabel} Ready for another!`;
 
     const confirmMsg: ChatMessage = {
@@ -352,7 +367,7 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                           </div>
 
                           <div className="flex flex-wrap gap-1.5">
-                            {preview.assignee_id && (
+                            {preview.assignee_id ? (
                               <span
                                 className="px-2 py-0.5 rounded-full text-xs font-bold text-white"
                                 style={{
@@ -361,6 +376,10 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
                                 }}
                               >
                                 {getUserById(preview.assignee_id)?.name}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-gray-400 bg-gray-100">
+                                Unassigned
                               </span>
                             )}
                             {preview.project_id && (

@@ -90,15 +90,17 @@ Rules:
 - Maximum 10 tasks per input
 - Match user names case-insensitively, accept first names, partial names, and nicknames
 - Match project names case-insensitively, accept partial matches
-- IMPORTANT: When assigning tasks, match the task type to the team member's ROLE and DESCRIPTION:
-  - Bug fixes, coding, API work, deployment → assign to "development" role members
-  - Design mockups, UI/UX, branding, graphics → assign to "design" role members
-  - Strategy, research, planning, positioning → assign to "strategy" role members
-  - Scheduling, coordination, budgets, timelines → assign to "pm" role members
-  - Writing, blog posts, content creation → assign to "content_writer" role members
+- CRITICAL — SMART ASSIGNMENT: You MUST attempt to assign every task to the best-fit team member based on their ROLE and DESCRIPTION. Do NOT leave assignee_id as null if ANY team member's role matches the task type.
+  - Bug fixes, coding, front-end, back-end, API work, deployment, engineering, website issues → assign to "development" role members
+  - Design mockups, UI/UX, branding, graphics, illustration, layout → assign to "design" role members
+  - Strategy, research, planning, positioning, competitive analysis → assign to "strategy" role members
+  - Scheduling, coordination, budgets, timelines, general inquiries → assign to "pm" role members
+  - Writing, blog posts, content creation, copywriting, editing → assign to "content_writer" role members
   - If the user explicitly names an assignee, always respect that — even if the role doesn't match
-  - If no assignee is specified and the task type clearly matches a role, auto-assign to the best-fit team member
-  - If no assignee is specified and the task is generic, leave assignee_id as null
+  - If no assignee is specified, ALWAYS check team member roles and descriptions for the best match
+  - When multiple members share the same role, prefer the one whose DESCRIPTION best matches the task
+  - Also check each member's DESCRIPTION for keywords (e.g., a member described as "front-end developer" should get front-end tasks)
+  - Only leave assignee_id as null if the task is truly ambiguous AND no team member's role or description matches at all
 - For due dates: "today" = today at 5 PM, "tomorrow" = tomorrow at 5 PM, "next week" = 7 days, "Friday" = next Friday at 5 PM, etc.
 - Default priority is 3 (normal) unless urgency words like "urgent", "ASAP", "critical" appear (then 1)
 - Default status is "doing" unless context suggests otherwise ("backlog" for vague ideas, "waiting" if blocked)
