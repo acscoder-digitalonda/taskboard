@@ -213,29 +213,26 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
       createdTasks.push(task);
     }
 
-    // Send notifications for cross-assigned tasks
-    if (notifyLevel !== "none") {
-      const crossAssigned = createdTasks.filter(
-        (t) => t.assignee_id !== currentUserId
-      );
-      for (const task of crossAssigned) {
-        try {
-          await apiFetch("/api/notifications/send", {
-            method: "POST",
-            body: JSON.stringify({
-              user_id: task.assignee_id,
-              type: "task_assigned",
-              title: `New task from ${getUserById(currentUserId)?.name || "someone"}`,
-              body: task.title,
-              link: `/tasks/${task.id}`,
-              reference_id: task.id,
-              reference_type: "task",
-              priority: task.priority,
-            }),
-          });
-        } catch (err) {
-          console.error("Failed to send notification:", err);
-        }
+    // Send notifications for all assigned tasks (including self-assign).
+    // The API endpoint handles delivery channels: in-app always, WhatsApp for P1,
+    // PWA push for others — based on user preferences and quiet hours.
+    for (const task of createdTasks) {
+      try {
+        await apiFetch("/api/notifications/send", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: task.assignee_id,
+            type: "task_assigned",
+            title: `New task from ${getUserById(currentUserId)?.name || "someone"}`,
+            body: task.title,
+            link: `/tasks/${task.id}`,
+            reference_id: task.id,
+            reference_type: "task",
+            priority: task.priority,
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to send notification:", err);
       }
     }
 

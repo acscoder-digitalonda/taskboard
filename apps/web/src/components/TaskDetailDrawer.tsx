@@ -465,8 +465,8 @@ export default function TaskDetailDrawer({
                   const oldAssignee = task.assignee_id;
                   store.updateTask(task.id, { assignee_id: newAssignee });
 
-                  // Send notification if assignee changed and it's not self-assign
-                  if (newAssignee !== oldAssignee && newAssignee !== currentUserId) {
+                  // Send notification if assignee changed (including self-assign)
+                  if (newAssignee !== oldAssignee) {
                     apiFetch("/api/notifications/send", {
                       method: "POST",
                       body: JSON.stringify({
