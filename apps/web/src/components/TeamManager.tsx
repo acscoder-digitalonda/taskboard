@@ -5,7 +5,7 @@ import { useUsers } from "@/lib/hooks";
 import { useFocusTrap } from "@/lib/use-focus-trap";
 import { supabase } from "@/lib/supabase";
 import { UserRole } from "@/types";
-import { Users, X, Edit3, Check, Sparkles, AlertTriangle, Bell, BellOff } from "lucide-react";
+import { Users, X, Edit3, Check, Sparkles, AlertTriangle, Bell, BellOff, Phone } from "lucide-react";
 
 interface TeamManagerProps {
   onClose: () => void;
@@ -44,6 +44,7 @@ export default function TeamManager({ onClose }: TeamManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<UserRole>("member");
   const [editDescription, setEditDescription] = useState("");
+  const [editPhone, setEditPhone] = useState("");
 
   // Track which users have push subscriptions
   const [pushUsers, setPushUsers] = useState<Set<string>>(new Set());
@@ -71,12 +72,14 @@ export default function TeamManager({ onClose }: TeamManagerProps) {
     setEditingId(id);
     setEditRole(user.role || "member");
     setEditDescription(user.description || "");
+    setEditPhone(user.phone || "");
   }
 
   function saveEdit(id: string) {
     updateUser(id, {
       role: editRole,
       description: editDescription.trim() || undefined,
+      phone: editPhone.trim() || undefined,
     });
     setEditingId(null);
   }
@@ -182,6 +185,20 @@ export default function TeamManager({ onClose }: TeamManagerProps) {
                     />
                   </div>
 
+                  {/* Phone (for WhatsApp P1 alerts) */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">
+                      Phone <span className="text-gray-400 font-normal">(WhatsApp alerts for P1 tasks)</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="+1 555 123 4567"
+                      className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                    />
+                  </div>
+
                   {/* Save / Cancel */}
                   <div className="flex gap-2">
                     <button
@@ -234,6 +251,13 @@ export default function TeamManager({ onClose }: TeamManagerProps) {
                   ) : (
                     <span title="No push — user needs to enable on their device" className="flex-shrink-0">
                       <BellOff size={12} className="text-gray-300" />
+                    </span>
+                  )}
+
+                  {/* WhatsApp phone status */}
+                  {user.phone && (
+                    <span title={`WhatsApp: ${user.phone}`} className="flex-shrink-0">
+                      <Phone size={12} className="text-green-500" />
                     </span>
                   )}
 

@@ -99,7 +99,8 @@ export default function TaskDetailDrawer({
       assigneeId: string | undefined,
       type: NotificationType,
       title: string,
-      body: string
+      body: string,
+      priority?: number
     ) => {
       if (!assigneeId || assigneeId === currentUserId || !task?.id) return;
       apiFetch("/api/notifications/send", {
@@ -112,10 +113,11 @@ export default function TaskDetailDrawer({
           link: `/tasks/${task.id}`,
           reference_id: task.id,
           reference_type: "task",
+          priority: priority ?? task?.priority,
         }),
       }).catch((err) => console.error("Notification failed:", err));
     },
-    [currentUserId, task?.id]
+    [currentUserId, task?.id, task?.priority]
   );
 
   // M4: Lock body scroll while drawer is open
@@ -749,7 +751,8 @@ export default function TaskDetailDrawer({
                       task.assignee_id,
                       "task_updated",
                       `Task priority changed: ${task.title}`,
-                      `${actorName} changed priority to ${labels[newPriority] || `P${newPriority}`}`
+                      `${actorName} changed priority to ${labels[newPriority] || `P${newPriority}`}`,
+                      newPriority
                     );
                   }
                 }}

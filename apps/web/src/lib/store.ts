@@ -138,6 +138,7 @@ async function fetchUsers(): Promise<User[]> {
     color: u.color,
     initials: u.initials,
     email: u.email,
+    phone: u.phone || undefined,
     avatar_url: u.avatar_url,
     role: (u.role as UserRole) || "member",
     description: u.description || undefined,

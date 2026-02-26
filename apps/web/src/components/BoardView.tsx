@@ -190,6 +190,7 @@ export default function BoardView({
           link: `/tasks/${draggedTask.id}`,
           reference_id: draggedTask.id,
           reference_type: "task",
+          priority: draggedTask.priority,
         }),
       }).catch((err) => console.error("Notification failed:", err));
     }

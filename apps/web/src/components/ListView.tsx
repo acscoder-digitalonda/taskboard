@@ -200,6 +200,7 @@ export default function ListView({ filteredTasks, onClickCard, loading, currentU
                                 link: `/tasks/${task.id}`,
                                 reference_id: task.id,
                                 reference_type: "task",
+                                priority: task.priority,
                               }),
                             }).catch((err) => console.error("Notification failed:", err));
                           }
@@ -323,6 +324,7 @@ export default function ListView({ filteredTasks, onClickCard, loading, currentU
                             link: `/tasks/${task.id}`,
                             reference_id: task.id,
                             reference_type: "task",
+                            priority: task.priority,
                           }),
                         }).catch((err) => console.error("Notification failed:", err));
                       }

@@ -184,37 +184,47 @@ export async function POST(req: NextRequest) {
         console.error("Push delivery failed:", pushErr);
       }
 
-      // Send WhatsApp only for urgent (P1) tasks
-      if (prefs?.whatsapp_enabled && prefs?.whatsapp_number && priority === 1) {
-        const whatsappMessage = `📋 TaskBoard: ${title}${body ? `\n${body}` : ""}`;
-        try {
-          await fetch(
-            `${req.nextUrl.origin}/api/notifications/whatsapp`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "X-Webhook-Secret": process.env.WEBHOOK_SECRET || "",
-              },
-              body: JSON.stringify({
-                to: prefs.whatsapp_number,
-                message: whatsappMessage,
-              }),
-            }
-          );
+      // Send WhatsApp for urgent (P1) tasks — check user profile phone or preferences phone
+      if (priority === 1) {
+        // Look up phone from user profile first, fall back to preferences
+        const { data: assigneeUser } = await supabase
+          .from("users")
+          .select("phone")
+          .eq("id", user_id)
+          .maybeSingle();
+        const phone = assigneeUser?.phone || prefs?.whatsapp_number;
 
-          // If push didn't deliver, mark as whatsapp
-          if (notif.channel === "in_app") {
-            await supabase
-              .from("notifications")
-              .update({
-                channel: "whatsapp",
-                delivered_at: new Date().toISOString(),
-              })
-              .eq("id", notif.id);
+        if (phone) {
+          const whatsappMessage = `📋 TaskBoard: ${title}${body ? `\n${body}` : ""}`;
+          try {
+            await fetch(
+              `${req.nextUrl.origin}/api/notifications/whatsapp`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Webhook-Secret": process.env.WEBHOOK_SECRET || "",
+                },
+                body: JSON.stringify({
+                  to: phone,
+                  message: whatsappMessage,
+                }),
+              }
+            );
+
+            // If push didn't deliver, mark as whatsapp
+            if (notif.channel === "in_app") {
+              await supabase
+                .from("notifications")
+                .update({
+                  channel: "whatsapp",
+                  delivered_at: new Date().toISOString(),
+                })
+                .eq("id", notif.id);
+            }
+          } catch (whatsappErr) {
+            console.error("WhatsApp delivery failed:", whatsappErr);
           }
-        } catch (whatsappErr) {
-          console.error("WhatsApp delivery failed:", whatsappErr);
         }
       }
     }
