@@ -89,6 +89,81 @@ export async function uploadFileFromUrl(
 }
 
 /**
+ * Server-side file upload from a raw buffer (for API-submitted files).
+ *
+ * Uploads the buffer to Supabase Storage and creates a record in the
+ * files table linked to the given task.
+ */
+export async function uploadFileFromBuffer(
+  buffer: ArrayBuffer,
+  options: {
+    fileName: string;
+    mimeType: string;
+    sizeBytes?: number;
+    projectId?: string;
+    taskId?: string;
+  }
+): Promise<{ id: string; storage_path: string } | null> {
+  const supabase = createServerSupabase();
+  const timestamp = Date.now();
+  const safeName = options.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  // Build storage path — organize under task if available
+  let storagePath: string;
+  if (options.projectId && options.taskId) {
+    storagePath = `${APP_PREFIX}/projects/${options.projectId}/tasks/${options.taskId}/${timestamp}-${safeName}`;
+  } else if (options.projectId) {
+    storagePath = `${APP_PREFIX}/projects/${options.projectId}/general/${timestamp}-${safeName}`;
+  } else if (options.taskId) {
+    storagePath = `${APP_PREFIX}/tasks/${options.taskId}/${timestamp}-${safeName}`;
+  } else {
+    storagePath = `${APP_PREFIX}/uploads/${timestamp}-${safeName}`;
+  }
+
+  try {
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: options.mimeType || "application/octet-stream",
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Error uploading file from buffer:", uploadError);
+      return null;
+    }
+
+    // Create record in files table
+    const { data, error: dbError } = await supabase
+      .from("files")
+      .insert({
+        name: options.fileName,
+        storage_path: storagePath,
+        mime_type: options.mimeType || null,
+        size_bytes: options.sizeBytes || buffer.byteLength,
+        uploaded_by: null, // API upload
+        task_id: options.taskId || null,
+        project_id: options.projectId || null,
+      })
+      .select("id, storage_path")
+      .single();
+
+    if (dbError || !data) {
+      console.error("Error creating file record:", dbError);
+      await supabase.storage.from(BUCKET).remove([storagePath]);
+      return null;
+    }
+
+    return { id: data.id, storage_path: data.storage_path };
+  } catch (error) {
+    console.error("Error uploading file from buffer:", error);
+    return null;
+  }
+}
+
+/**
  * Link existing file records to a task (used after triage creates a task
  * from an email that had attachments).
  */

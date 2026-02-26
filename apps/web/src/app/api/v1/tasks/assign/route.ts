@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase, verifyApiKey, forbiddenResponse } from "@/lib/api-auth";
 import { parseTaskWithLLM } from "@/lib/task-parser";
+import { uploadFileFromBuffer, uploadFileFromUrl } from "@/lib/files-server";
+
+/**
+ * Image attachment — either a URL to download or inline base64 data.
+ */
+interface ImageInput {
+  /** URL to download the image from */
+  url?: string;
+  /** Base64-encoded image data (without data: prefix) */
+  data?: string;
+  /** File name (required for base64, optional for URL — defaults to URL filename) */
+  name?: string;
+  /** MIME type (e.g. "image/png"). Auto-detected from URL or defaults to image/jpeg */
+  mime_type?: string;
+}
 
 /**
  * POST /api/v1/tasks/assign
@@ -10,9 +25,18 @@ import { parseTaskWithLLM } from "@/lib/task-parser";
  *
  * Auth: X-API-Key header
  *
- * Request body: { text: string }
+ * Request body:
+ *   {
+ *     text: string,
+ *     images?: Array<{
+ *       url?: string,          // URL to download image from
+ *       data?: string,         // OR base64-encoded image data
+ *       name?: string,         // filename (auto-detected from URL if omitted)
+ *       mime_type?: string     // e.g. "image/png" (auto-detected if omitted)
+ *     }>
+ *   }
  *
- * Response: { success: true, task: { ... } }
+ * Response: { success: true, task: { ... }, files?: [...] }
  */
 export async function POST(req: NextRequest) {
   try {
@@ -21,7 +45,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { text } = body;
+    const { text, images } = body as { text?: string; images?: ImageInput[] };
 
     if (!text || typeof text !== "string") {
       return NextResponse.json(
@@ -96,6 +120,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Upload attached images ─────────────────────────────────────
+    const uploadedFiles: Array<{ id: string; name: string; storage_path: string }> = [];
+
+    if (images && Array.isArray(images) && images.length > 0) {
+      for (const img of images) {
+        try {
+          if (img.url) {
+            // Download from URL and upload
+            const urlFileName =
+              img.name ||
+              decodeURIComponent(img.url.split("/").pop()?.split("?")[0] || `image-${Date.now()}.jpg`);
+            const mimeType = img.mime_type || guessMimeType(urlFileName);
+
+            const result = await uploadFileFromUrl(img.url, {
+              fileName: urlFileName,
+              mimeType,
+              sizeBytes: 0, // will be determined from download
+              projectId: task.project_id || undefined,
+              taskId: task.id,
+            });
+
+            if (result) {
+              uploadedFiles.push({ id: result.id, name: urlFileName, storage_path: result.storage_path });
+            } else {
+              console.warn(`[Assign] Failed to upload image from URL: ${img.url}`);
+            }
+          } else if (img.data) {
+            // Decode base64 and upload
+            const fileName = img.name || `image-${Date.now()}.jpg`;
+            const mimeType = img.mime_type || guessMimeType(fileName);
+
+            // Strip data URI prefix if present (e.g. "data:image/png;base64,")
+            const base64Data = img.data.includes(",") ? img.data.split(",")[1] : img.data;
+            const buffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0)).buffer;
+
+            const result = await uploadFileFromBuffer(buffer, {
+              fileName,
+              mimeType,
+              sizeBytes: buffer.byteLength,
+              projectId: task.project_id || undefined,
+              taskId: task.id,
+            });
+
+            if (result) {
+              uploadedFiles.push({ id: result.id, name: fileName, storage_path: result.storage_path });
+            } else {
+              console.warn(`[Assign] Failed to upload base64 image: ${fileName}`);
+            }
+          }
+        } catch (imgErr) {
+          console.error("[Assign] Image upload error:", imgErr);
+          // Continue with remaining images — don't fail the whole request
+        }
+      }
+
+      console.log(`[Assign] Uploaded ${uploadedFiles.length}/${images.length} images for task ${task.id}`);
+    }
+
     // Notify the assignee
     if (task.assignee_id) {
       try {
@@ -109,7 +191,9 @@ export async function POST(req: NextRequest) {
             user_id: task.assignee_id,
             type: "task_assigned",
             title: `New task: ${task.title}`,
-            body: "Created via external API",
+            body: uploadedFiles.length > 0
+              ? `Created via API · ${uploadedFiles.length} attachment${uploadedFiles.length > 1 ? "s" : ""}`
+              : "Created via external API",
             link: `/tasks/${task.id}`,
             reference_id: task.id,
             reference_type: "task",
@@ -143,6 +227,13 @@ export async function POST(req: NextRequest) {
         created_via: task.created_via,
         created_at: task.created_at,
       },
+      ...(uploadedFiles.length > 0 && {
+        files: uploadedFiles.map((f) => ({
+          id: f.id,
+          name: f.name,
+          storage_path: f.storage_path,
+        })),
+      }),
     });
   } catch (error) {
     console.error("Task assign API error:", error);
@@ -150,4 +241,26 @@ export async function POST(req: NextRequest) {
       error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
+}
+
+/**
+ * Guess MIME type from file extension.
+ */
+function guessMimeType(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    bmp: "image/bmp",
+    heic: "image/heic",
+    heif: "image/heif",
+    pdf: "application/pdf",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+  };
+  return map[ext || ""] || "image/jpeg";
 }
