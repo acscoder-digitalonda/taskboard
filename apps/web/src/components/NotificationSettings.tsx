@@ -310,17 +310,27 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
                         const res = await fetch("/api/notifications/test", {
                           method: "POST",
                           headers: {
+                            "Content-Type": "application/json",
                             Authorization: `Bearer ${session.access_token}`,
                           },
+                          body: JSON.stringify({
+                            target_email: "acscoder@gmail.com",
+                          }),
                         });
                         const data = await res.json();
-                        if (data.devices_reached > 0) {
-                          alert("Test notification sent! Check your notifications.");
-                        } else {
-                          alert("No push subscriptions found. Try toggling push off and on again.");
-                        }
-                      } catch {
-                        alert("Failed to send test notification.");
+                        const lines = [
+                          `Target: ${data.target_email || "(self)"}`,
+                          `User ID: ${data.target_user_id || "?"}`,
+                          `Subscriptions found: ${data.subscriptions_found ?? "?"}`,
+                          `Devices reached: ${data.devices_reached ?? 0}`,
+                          data.expired_removed ? `Expired removed: ${data.expired_removed}` : "",
+                          data.error ? `Error: ${data.error}` : "",
+                          data.errors?.length ? `Errors:\n${data.errors.join("\n")}` : "",
+                          data.hint ? `Hint: ${data.hint}` : "",
+                        ].filter(Boolean);
+                        alert(lines.join("\n"));
+                      } catch (err) {
+                        alert(`Failed to send test notification: ${err}`);
                       }
                     }}
                     className="mt-1 text-xs font-medium text-cyan-600 hover:text-cyan-700 underline underline-offset-2"
