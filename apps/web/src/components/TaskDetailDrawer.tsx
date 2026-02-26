@@ -193,28 +193,36 @@ export default function TaskDetailDrawer({
       if (pendingChangesRef.current.length > 0 && baselineRef.current && task) {
         const assigneeId = task.assignee_id;
         const changerName = getUserById(currentUserId || "")?.name || "Someone";
-        const changes = [...pendingChangesRef.current];
+        const changes = pendingChangesRef.current.filter((c) => c !== "assignee");
         pendingChangesRef.current = [];
-        apiFetch("/api/notifications/send", {
-          method: "POST",
-          body: JSON.stringify({
-            user_id: assigneeId,
-            type: "task_updated",
-            title: `Task updated: ${task.title}`,
-            body: `${changerName} changed: ${changes.join(", ")}`,
-            link: `/tasks/${task.id}`,
-            reference_id: task.id,
-            reference_type: "task",
-            priority: task.priority,
-          }),
-        }).then(async (res) => {
-          if (res.ok) {
-            try {
-              const { notification } = await res.json();
-              if (notification) notificationStore.addLocalNotification(notification);
-            } catch { /* not critical */ }
-          }
-        }).catch(() => {});
+        if (changes.length > 0) {
+          const notifType = task.status === "done" && changes.some((c) => c.startsWith("status"))
+            ? "task_completed"
+            : "task_updated";
+          const notifTitle = notifType === "task_completed"
+            ? `Task completed: ${task.title}`
+            : `Task updated: ${task.title}`;
+          apiFetch("/api/notifications/send", {
+            method: "POST",
+            body: JSON.stringify({
+              user_id: assigneeId,
+              type: notifType,
+              title: notifTitle,
+              body: `${changerName} changed: ${changes.join(", ")}`,
+              link: `/tasks/${task.id}`,
+              reference_id: task.id,
+              reference_type: "task",
+              priority: task.priority,
+            }),
+          }).then(async (res) => {
+            if (res.ok) {
+              try {
+                const { notification } = await res.json();
+                if (notification) notificationStore.addLocalNotification(notification);
+              } catch { /* not critical */ }
+            }
+          }).catch(() => {});
+        }
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,14 +259,32 @@ export default function TaskDetailDrawer({
     // Debounce: send after 2 seconds of quiet
     notifyTimerRef.current = setTimeout(async () => {
       const changerName = getUserById(currentUserId)?.name || "Someone";
+
+      // Skip assignee-only changes (handled by immediate task_assigned notification)
+      const nonAssigneeChanges = changes.filter((c) => c !== "assignee");
+      if (nonAssigneeChanges.length === 0) {
+        baselineRef.current = snapshotTask(task);
+        pendingChangesRef.current = [];
+        notifyTimerRef.current = null;
+        return;
+      }
+
+      // Use appropriate notification type
+      const notifType = task.status === "done" && nonAssigneeChanges.some((c) => c.startsWith("status"))
+        ? "task_completed"
+        : "task_updated";
+      const notifTitle = notifType === "task_completed"
+        ? `Task completed: ${task.title}`
+        : `Task updated: ${task.title}`;
+
       try {
         const res = await apiFetch("/api/notifications/send", {
           method: "POST",
           body: JSON.stringify({
             user_id: task.assignee_id,
-            type: "task_updated",
-            title: `Task updated: ${task.title}`,
-            body: `${changerName} changed: ${changes.join(", ")}`,
+            type: notifType,
+            title: notifTitle,
+            body: `${changerName} changed: ${nonAssigneeChanges.join(", ")}`,
             link: `/tasks/${task.id}`,
             reference_id: task.id,
             reference_type: "task",
@@ -701,21 +727,8 @@ export default function TaskDetailDrawer({
                 value={task.status}
                 onChange={(e) => {
                   const newStatus = e.target.value as TaskStatus;
-                  const oldStatus = task.status;
                   store.updateTask(task.id, { status: newStatus });
-
-                  if (newStatus !== oldStatus) {
-                    const actorName = getUserById(currentUserId || "")?.name || "Someone";
-                    const type = newStatus === "done" ? "task_completed" : "task_updated";
-                    notifyTaskUpdate(
-                      task.assignee_id,
-                      type,
-                      newStatus === "done"
-                        ? `Task completed: ${task.title}`
-                        : `Task status changed: ${task.title}`,
-                      `${actorName} changed status to ${STATUS_LABELS[newStatus]}`
-                    );
-                  }
+                  // Notification handled by debounced batch system (avoids duplicate WhatsApp)
                 }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               >
@@ -741,20 +754,8 @@ export default function TaskDetailDrawer({
                 value={task.priority}
                 onChange={(e) => {
                   const newPriority = parseInt(e.target.value);
-                  const oldPriority = task.priority;
                   store.updateTask(task.id, { priority: newPriority });
-
-                  if (newPriority !== oldPriority) {
-                    const actorName = getUserById(currentUserId || "")?.name || "Someone";
-                    const labels = ["", "P1 — Urgent", "P2 — High", "P3 — Normal", "P4 — Low"];
-                    notifyTaskUpdate(
-                      task.assignee_id,
-                      "task_updated",
-                      `Task priority changed: ${task.title}`,
-                      `${actorName} changed priority to ${labels[newPriority] || `P${newPriority}`}`,
-                      newPriority
-                    );
-                  }
+                  // Notification handled by debounced batch system (avoids duplicate WhatsApp)
                 }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               >
@@ -785,16 +786,7 @@ export default function TaskDetailDrawer({
                     ? new Date(e.target.value).toISOString()
                     : undefined;
                   store.updateTask(task.id, { due_at: newDue });
-
-                  const actorName = getUserById(currentUserId || "")?.name || "Someone";
-                  notifyTaskUpdate(
-                    task.assignee_id,
-                    "task_updated",
-                    `Due date updated: ${task.title}`,
-                    newDue
-                      ? `${actorName} set due date to ${new Date(newDue).toLocaleDateString()}`
-                      : `${actorName} removed the due date`
-                  );
+                  // Notification handled by debounced batch system (avoids duplicate WhatsApp)
                 }}
                 className="w-full px-3 py-2 text-sm font-semibold bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-200 cursor-pointer"
               />
