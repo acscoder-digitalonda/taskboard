@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
         if (phone) {
           const whatsappMessage = `📋 TaskBoard: ${title}${body ? `\n${body}` : ""}`;
           try {
-            await fetch(
+            const waRes = await fetch(
               `${req.nextUrl.origin}/api/notifications/whatsapp`,
               {
                 method: "POST",
@@ -212,15 +212,20 @@ export async function POST(req: NextRequest) {
               }
             );
 
-            // If push didn't deliver, mark as whatsapp
-            if (notif.channel === "in_app") {
-              await supabase
-                .from("notifications")
-                .update({
-                  channel: "whatsapp",
-                  delivered_at: new Date().toISOString(),
-                })
-                .eq("id", notif.id);
+            if (waRes.ok) {
+              // Only mark as whatsapp-delivered if Twilio accepted it
+              if (notif.channel === "in_app") {
+                await supabase
+                  .from("notifications")
+                  .update({
+                    channel: "whatsapp",
+                    delivered_at: new Date().toISOString(),
+                  })
+                  .eq("id", notif.id);
+              }
+            } else {
+              const waError = await waRes.json().catch(() => ({}));
+              console.error("WhatsApp API error:", waRes.status, waError);
             }
           } catch (whatsappErr) {
             console.error("WhatsApp delivery failed:", whatsappErr);

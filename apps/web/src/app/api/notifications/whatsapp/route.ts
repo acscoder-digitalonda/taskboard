@@ -40,8 +40,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Normalize phone number: strip spaces/dashes/parens, fix +0XX → +XX
+    let normalized = to.replace(/[\s\-\(\)]/g, "");
+    // Fix common mistake: +084... → +84... (extra 0 after +)
+    normalized = normalized.replace(/^\+0+/, "+");
+    // Ensure it starts with +
+    if (!normalized.startsWith("+") && !normalized.startsWith("whatsapp:")) {
+      normalized = `+${normalized}`;
+    }
+
     // Format WhatsApp number
-    const whatsappTo = to.startsWith("whatsapp:") ? to : `whatsapp:${to}`;
+    const whatsappTo = normalized.startsWith("whatsapp:") ? normalized : `whatsapp:${normalized}`;
 
     // Send via Twilio REST API (no SDK needed)
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
