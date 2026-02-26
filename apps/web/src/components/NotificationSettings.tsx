@@ -336,8 +336,10 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
                           `Devices reached: ${data.devices_reached ?? 0}`,
                           data.expired_removed ? `Expired removed: ${data.expired_removed}` : "",
                           data.error ? `Error: ${data.error}` : "",
+                          data.details ? `Details: ${data.details}` : "",
                           data.errors?.length ? `Errors:\n${data.errors.join("\n")}` : "",
                           data.hint ? `Hint: ${data.hint}` : "",
+                          `HTTP ${res.status}`,
                         ].filter(Boolean);
                         alert(lines.join("\n"));
                       } catch (err) {
