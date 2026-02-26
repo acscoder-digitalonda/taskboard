@@ -14,6 +14,32 @@ function emit() {
   listeners.forEach((fn) => fn());
 }
 
+// ---- Browser/PWA notification ----
+
+function showBrowserNotification(notif: Notification) {
+  if (typeof window === "undefined") return;
+  if (!("Notification" in window)) return;
+  if (window.Notification.permission !== "granted") return;
+
+  const options: NotificationOptions = {
+    body: notif.body || undefined,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: notif.id, // prevents duplicates
+    data: { link: notif.link },
+  };
+
+  // Use service worker notification (works in PWA background)
+  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.showNotification(notif.title, options);
+    });
+  } else {
+    // Fallback: basic browser notification
+    new window.Notification(notif.title, options);
+  }
+}
+
 // ---- Fetch (via server API — bypasses RLS) ----
 
 async function fetchNotifications(userId: string): Promise<Notification[]> {
@@ -55,6 +81,8 @@ function setupNotifRealtime(userId: string) {
           notifications = [newNotif, ...notifications];
           unreadCount = notifications.filter((n) => !n.read_at).length;
           emit();
+          // Show browser/PWA notification
+          showBrowserNotification(newNotif);
         }
       }
     )
