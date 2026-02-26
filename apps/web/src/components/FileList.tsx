@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   File,
   Image,
@@ -20,6 +20,7 @@ import {
   getFileIconName,
   getFileUrl,
 } from "@/lib/files";
+import ImageLightbox from "./ImageLightbox";
 
 interface FileListProps {
   files: FileAttachment[];
@@ -65,6 +66,13 @@ export default function FileList({
 }: FileListProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Collect all image files for the lightbox slideshow
+  const imageFiles = useMemo(
+    () => files.filter((f) => f.mime_type?.startsWith("image/") && f.url),
+    [files]
+  );
 
   const handleDownload = useCallback(async (file: FileAttachment) => {
     setDownloadingId(file.id);
@@ -119,14 +127,22 @@ export default function FileList({
           >
             {/* Icon / Thumbnail */}
             {isImage && file.url ? (
-              <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const imgIdx = imageFiles.findIndex((f) => f.id === file.id);
+                  if (imgIdx >= 0) setLightboxIndex(imgIdx);
+                }}
+                className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100 cursor-pointer ring-0 hover:ring-2 hover:ring-cyan-300 transition-all"
+                title="Click to preview"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={file.url}
                   alt={file.name}
                   className="w-full h-full object-cover"
                 />
-              </div>
+              </button>
             ) : (
               <div
                 className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${bgClass}`}
@@ -195,6 +211,15 @@ export default function FileList({
           </div>
         );
       })}
+
+      {/* Image lightbox */}
+      {lightboxIndex !== null && imageFiles.length > 0 && (
+        <ImageLightbox
+          images={imageFiles}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </div>
   );
 }
