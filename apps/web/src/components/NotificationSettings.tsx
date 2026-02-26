@@ -153,18 +153,24 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
       timezone !== original.timezone
     : false;
 
+  // Push subscription error message (shown below toggle)
+  const [pushError, setPushError] = useState<string | null>(null);
+
   async function handlePushToggle() {
     if (!session?.access_token) return;
     setPushToggling(true);
+    setPushError(null);
     try {
       if (pushEnabled) {
         await unsubscribeFromPush(session.access_token);
         setPushEnabled(false);
       } else {
-        const ok = await subscribeToPush(session.access_token);
-        setPushEnabled(ok);
-        if (!ok) {
+        const result = await subscribeToPush(session.access_token);
+        setPushEnabled(result.ok);
+        if (!result.ok) {
           setPushPermission(getPushPermission());
+          setPushError(result.error || "Push subscription failed");
+          alert(`Push setup failed:\n${result.error}`);
         }
       }
     } finally {
@@ -302,6 +308,11 @@ export default function NotificationSettings({ onBack }: NotificationSettingsPro
                 <p className="text-[10px] text-gray-400">
                   Get notified on this device when tasks are assigned to you
                 </p>
+                {pushError && (
+                  <p className="text-[10px] text-red-500 mt-1 bg-red-50 rounded-lg px-2 py-1.5 break-words">
+                    {pushError}
+                  </p>
+                )}
                 {pushEnabled && pushPermission === "granted" && (
                   <button
                     onClick={async () => {

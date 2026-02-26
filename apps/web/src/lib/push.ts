@@ -31,53 +31,117 @@ export function getPushPermission(): NotificationPermission | "unsupported" {
   return Notification.permission;
 }
 
+/** Result of subscribeToPush — includes error message for debugging */
+export interface PushSubscribeResult {
+  ok: boolean;
+  error?: string;
+}
+
 /**
  * Subscribe the browser to push notifications and register with our server.
- * Returns true on success, false if permission denied or error.
+ * Returns { ok: true } on success, { ok: false, error: "..." } with detailed reason on failure.
  */
-export async function subscribeToPush(authToken: string): Promise<boolean> {
-  if (!isPushSupported() || !VAPID_PUBLIC_KEY) return false;
+export async function subscribeToPush(authToken: string): Promise<PushSubscribeResult> {
+  console.log("[Push] Starting subscription...");
+
+  if (!isPushSupported()) {
+    const msg = "Push not supported in this browser (missing serviceWorker, PushManager, or Notification)";
+    console.error("[Push]", msg);
+    return { ok: false, error: msg };
+  }
+
+  if (!VAPID_PUBLIC_KEY) {
+    const msg = "VAPID public key not configured (NEXT_PUBLIC_VAPID_PUBLIC_KEY env var is empty)";
+    console.error("[Push]", msg);
+    return { ok: false, error: msg };
+  }
+
+  console.log("[Push] VAPID key present:", VAPID_PUBLIC_KEY.substring(0, 12) + "...");
 
   try {
+    // Step 1: Request notification permission
+    console.log("[Push] Requesting notification permission...");
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") return false;
+    console.log("[Push] Permission result:", permission);
+    if (permission !== "granted") {
+      return { ok: false, error: `Notification permission ${permission}. Go to browser settings to allow notifications for this site.` };
+    }
 
+    // Step 2: Get service worker registration
+    console.log("[Push] Waiting for service worker...");
     const registration = await navigator.serviceWorker.ready;
-    // Create a fresh copy so .buffer exactly matches the typed array length.
-    // This avoids issues on iOS Safari where .buffer could be larger than the view.
-    // Create a fresh ArrayBuffer copy so the buffer exactly matches the key length.
-    // Using .slice() + cast avoids iOS Safari issues with oversized underlying buffers.
+    console.log("[Push] Service worker ready, scope:", registration.scope);
+
+    // Step 3: Subscribe to push via browser
+    console.log("[Push] Subscribing to pushManager...");
     const keyBytes = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
     const applicationServerKey = keyBytes.buffer.slice(
       keyBytes.byteOffset,
       keyBytes.byteOffset + keyBytes.byteLength
     ) as ArrayBuffer;
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey,
-    });
+
+    let subscription: PushSubscription;
+    try {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+    } catch (subErr) {
+      const msg = `pushManager.subscribe() failed: ${subErr instanceof Error ? subErr.message : String(subErr)}`;
+      console.error("[Push]", msg);
+      return { ok: false, error: msg };
+    }
+
+    console.log("[Push] Browser subscription created:", subscription.endpoint.substring(0, 60) + "...");
 
     const json = subscription.toJSON();
-    if (!json.endpoint || !json.keys) return false;
+    if (!json.endpoint || !json.keys) {
+      const msg = "Subscription missing endpoint or keys";
+      console.error("[Push]", msg);
+      return { ok: false, error: msg };
+    }
 
-    // Register with server
-    const res = await fetch("/api/notifications/subscribe", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({
-        endpoint: json.endpoint,
-        p256dh: json.keys.p256dh,
-        auth: json.keys.auth,
-      }),
-    });
+    // Step 4: Register with our server
+    console.log("[Push] Saving subscription to server...");
+    let res: Response;
+    try {
+      res = await fetch("/api/notifications/subscribe", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          p256dh: json.keys.p256dh,
+          auth: json.keys.auth,
+        }),
+      });
+    } catch (fetchErr) {
+      const msg = `Network error saving subscription: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`;
+      console.error("[Push]", msg);
+      return { ok: false, error: msg };
+    }
 
-    return res.ok;
+    if (!res.ok) {
+      let serverError = "";
+      try {
+        const body = await res.json();
+        serverError = body.error || JSON.stringify(body);
+      } catch {
+        serverError = `HTTP ${res.status}`;
+      }
+      const msg = `Server rejected subscription: ${serverError}`;
+      console.error("[Push]", msg);
+      return { ok: false, error: msg };
+    }
+
+    console.log("[Push] Subscription saved successfully!");
+    return { ok: true };
   } catch (err) {
-    console.error("Push subscription failed:", err);
-    return false;
+    const msg = `Unexpected error: ${err instanceof Error ? err.message : String(err)}`;
+    console.error("[Push]", msg);
+    return { ok: false, error: msg };
   }
 }
 
