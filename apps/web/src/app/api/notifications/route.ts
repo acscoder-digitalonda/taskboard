@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  createServerSupabase,
+  createUserSupabase,
   getAuthenticatedUserId,
   unauthorizedResponse,
 } from "@/lib/api-auth";
@@ -8,16 +8,15 @@ import {
 /**
  * GET /api/notifications
  * Fetch the authenticated user's notifications.
- * Uses service_role key to bypass RLS — the client-side supabase's custom
- * auth workarounds (buildAuthFetch, no-op lock) don't reliably authenticate
- * Postgrest queries, so we route through the server.
+ * Uses the caller's JWT so auth.uid() is set and RLS policies are satisfied
+ * without requiring the service_role key.
  */
 export async function GET(req: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId(req);
     if (!userId) return unauthorizedResponse();
 
-    const supabase = createServerSupabase();
+    const supabase = createUserSupabase(req);
     const { data, error } = await supabase
       .from("notifications")
       .select("*")
@@ -57,7 +56,7 @@ export async function PATCH(req: NextRequest) {
     if (!userId) return unauthorizedResponse();
 
     const { notification_id, mark_all } = await req.json();
-    const supabase = createServerSupabase();
+    const supabase = createUserSupabase(req);
     const now = new Date().toISOString();
 
     if (mark_all) {

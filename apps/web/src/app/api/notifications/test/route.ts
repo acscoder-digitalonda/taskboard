@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import {
-  createServerSupabase,
+  createUserSupabase,
   getAuthenticatedUserId,
   unauthorizedResponse,
 } from "@/lib/api-auth";
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const callerId = await getAuthenticatedUserId(req);
     if (!callerId) return unauthorizedResponse();
 
-    const supabase = createServerSupabase();
+    const supabase = createUserSupabase(req);
 
     // Parse optional body
     let targetEmail: string | undefined;

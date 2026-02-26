@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  createUserSupabase,
   createServerSupabase,
   getAuthenticatedUserId,
   verifyWebhookSecret,
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { sendPushToUser } from "@/lib/web-push";
+import { SupabaseClient } from "@supabase/supabase-js";
 import { NotificationType } from "@/types";
 
 /**
@@ -99,7 +101,14 @@ export async function POST(req: NextRequest) {
     const isWebhook = verifyWebhookSecret(req);
     if (!userId && !isWebhook) return unauthorizedResponse();
 
-    const supabase = createServerSupabase();
+    // Use user JWT when available (satisfies RLS without service role key).
+    // Fall back to server client for webhook/machine-to-machine calls.
+    let supabase: SupabaseClient;
+    if (userId) {
+      supabase = createUserSupabase(req);
+    } else {
+      supabase = createServerSupabase();
+    }
     const payload = await req.json();
     const {
       user_id,
@@ -170,7 +179,7 @@ export async function POST(req: NextRequest) {
           body: body || undefined,
           link: link || undefined,
           id: notif.id,
-        });
+        }, supabase);
         if (pushSent > 0) {
           await supabase
             .from("notifications")

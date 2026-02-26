@@ -19,6 +19,24 @@ export function createServerSupabase() {
 }
 
 /**
+ * Create a Supabase client authenticated with the caller's JWT.
+ * This satisfies RLS policies that check `auth.uid()` without
+ * requiring the service role key.
+ *
+ * Use this for routes where the caller is an authenticated user
+ * and the data operations should respect RLS.
+ */
+export function createUserSupabase(req: NextRequest) {
+  const token = req.headers.get("authorization")?.slice(7) || "";
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase not configured");
+  }
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+}
+
+/**
  * Verify the user session from the Authorization header.
  * Returns the authenticated user ID or null.
  *

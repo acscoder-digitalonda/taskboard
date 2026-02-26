@@ -1,24 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import {
+  createUserSupabase,
   getAuthenticatedUserId,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-
-/**
- * Create a Supabase client authenticated with the user's JWT.
- * This satisfies RLS policies that check `auth.uid() = user_id`
- * without requiring the service role key.
- */
-function createUserSupabase(req: NextRequest) {
-  const token = req.headers.get("authorization")?.slice(7) || "";
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-}
 
 /**
  * POST /api/notifications/subscribe

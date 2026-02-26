@@ -1,5 +1,6 @@
 import webpush from "web-push";
 import { createServerSupabase } from "./api-auth";
+import { SupabaseClient } from "@supabase/supabase-js";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
@@ -24,17 +25,22 @@ interface PushPayload {
 /**
  * Send a Web Push notification to all of a user's registered devices.
  * Silently removes expired/invalid subscriptions (410 Gone).
+ *
+ * Accepts an optional pre-authenticated Supabase client. When provided,
+ * uses it (with the caller's JWT) so RLS is satisfied without the
+ * service role key. Falls back to createServerSupabase() otherwise.
  */
 export async function sendPushToUser(
   userId: string,
-  payload: PushPayload
+  payload: PushPayload,
+  supabaseClient?: SupabaseClient
 ): Promise<number> {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
     console.warn("VAPID keys not configured — skipping push");
     return 0;
   }
 
-  const supabase = createServerSupabase();
+  const supabase = supabaseClient || createServerSupabase();
 
   const { data: subs, error } = await supabase
     .from("push_subscriptions")
