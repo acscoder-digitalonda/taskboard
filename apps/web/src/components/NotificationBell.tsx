@@ -82,7 +82,13 @@ export default function NotificationBell({ userId }: NotificationBellProps) {
     <div className="relative" ref={panelRef}>
       {/* Bell button */}
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          const opening = !open;
+          setOpen(opening);
+          if (opening && unreadCount > 0) {
+            notificationStore.markAllAsRead(userId);
+          }
+        }}
         className="relative p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
       >
         <Bell size={18} />
