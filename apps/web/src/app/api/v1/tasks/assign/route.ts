@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
         assignee_id: assigneeId,
         project_id: parsed.project_id || null,
         status: parsed.status || "doing",
-        priority: parsed.priority || 3,
+        priority: Math.max(1, Math.min(4, parsed.priority || 3)),
         due_at: parsed.due_at || null,
         created_by_id: createdById,
         created_via: "openclaw",
@@ -153,6 +153,14 @@ export async function POST(req: NextRequest) {
 
             // Strip data URI prefix if present (e.g. "data:image/png;base64,")
             const base64Data = img.data.includes(",") ? img.data.split(",")[1] : img.data;
+
+            // Guard against OOM: 70MB base64 ≈ 50MB decoded
+            const MAX_BASE64_LENGTH = 70 * 1024 * 1024;
+            if (base64Data.length > MAX_BASE64_LENGTH) {
+              console.warn(`[Assign] Base64 image too large (${(base64Data.length / 1024 / 1024).toFixed(1)}MB), skipping`);
+              continue;
+            }
+
             const buffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0)).buffer;
 
             const result = await uploadFileFromBuffer(buffer, {

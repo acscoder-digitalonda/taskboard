@@ -2,6 +2,7 @@ import { createServerSupabase } from "@/lib/api-auth";
 
 const BUCKET = "files";
 const APP_PREFIX = "taskboard";
+const MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
 /**
  * Server-side file upload from a URL (for processing email attachments).
@@ -41,7 +42,18 @@ export async function uploadFileFromUrl(
       return null;
     }
 
+    // Guard against oversized downloads
+    const contentLength = response.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_DOWNLOAD_SIZE) {
+      console.error(`Attachment too large (${contentLength} bytes, max ${MAX_DOWNLOAD_SIZE}): ${url}`);
+      return null;
+    }
+
     const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > MAX_DOWNLOAD_SIZE) {
+      console.error(`Downloaded file exceeds size limit (${buffer.byteLength} bytes): ${url}`);
+      return null;
+    }
 
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage

@@ -19,6 +19,46 @@ export interface ParsedTaskBatch {
   confidence: number;
 }
 
+const VALID_STATUSES: ParsedTask["status"][] = ["backlog", "doing", "waiting", "done"];
+
+/**
+ * Validate and sanitize a parsed task from LLM output.
+ * Ensures all fields are the correct type and within valid ranges.
+ */
+function validateParsedTask(raw: Record<string, unknown>): ParsedTask {
+  const title = typeof raw.title === "string" ? raw.title.trim() : "";
+  if (!title) throw new Error("Parsed task has empty or missing title");
+
+  const priority =
+    typeof raw.priority === "number"
+      ? Math.max(1, Math.min(4, Math.round(raw.priority)))
+      : 3;
+
+  const status = VALID_STATUSES.includes(raw.status as ParsedTask["status"])
+    ? (raw.status as ParsedTask["status"])
+    : "doing";
+
+  const confidence =
+    typeof raw.confidence === "number"
+      ? Math.max(0, Math.min(1, raw.confidence))
+      : 0.5;
+
+  const dueAt =
+    typeof raw.due_at === "string" && !isNaN(Date.parse(raw.due_at))
+      ? raw.due_at
+      : null;
+
+  return {
+    title,
+    assignee_id: typeof raw.assignee_id === "string" ? raw.assignee_id : null,
+    project_id: typeof raw.project_id === "string" ? raw.project_id : null,
+    due_at: dueAt,
+    priority,
+    status,
+    confidence,
+  };
+}
+
 /**
  * Parse natural language text into one or more structured tasks using Claude Sonnet.
  *
@@ -128,16 +168,21 @@ Rules:
 
   // Handle both new array format and legacy single-object format
   if (parsed.tasks && Array.isArray(parsed.tasks)) {
-    return {
-      tasks: parsed.tasks.slice(0, 10) as ParsedTask[],
-      confidence: parsed.confidence ?? parsed.tasks[0]?.confidence ?? 0.5,
-    };
+    const validatedTasks = parsed.tasks
+      .slice(0, 10)
+      .map((t: Record<string, unknown>) => validateParsedTask(t));
+    const batchConfidence =
+      typeof parsed.confidence === "number"
+        ? Math.max(0, Math.min(1, parsed.confidence))
+        : validatedTasks[0]?.confidence ?? 0.5;
+    return { tasks: validatedTasks, confidence: batchConfidence };
   }
 
   // Legacy single-object fallback
+  const validated = validateParsedTask(parsed);
   return {
-    tasks: [parsed as ParsedTask],
-    confidence: parsed.confidence ?? 0.5,
+    tasks: [validated],
+    confidence: validated.confidence,
   };
 }
 
