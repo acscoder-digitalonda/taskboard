@@ -21,39 +21,49 @@ export function useTasks() {
 
 export function useTasksByStatus(status: TaskStatus) {
   const { tasks } = useTasks();
-  return tasks
-    .filter((t) => t.status === status)
-    .sort((a, b) => a.priority - b.priority);
+  return useMemo(
+    () =>
+      tasks
+        .filter((t) => t.status === status)
+        .sort((a, b) => a.priority - b.priority),
+    [tasks, status]
+  );
 }
 
 export function useMyDayTasks(userId: string) {
   const { tasks } = useTasks();
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
 
-  const myTasks = tasks
-    .filter(
-      (t) =>
-        t.assignee_id === userId &&
-        t.status !== "done" &&
-        t.due_at &&
-        new Date(t.due_at) <= today
-    )
-    .sort((a, b) => a.priority - b.priority);
+  return useMemo(() => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
 
-  const top3 = myTasks.slice(0, 3);
-  const more = myTasks.slice(3);
-  const upcoming = tasks
-    .filter(
-      (t) =>
-        t.assignee_id === userId &&
-        t.status !== "done" &&
-        t.due_at &&
-        new Date(t.due_at) > today
-    )
-    .sort((a, b) => new Date(a.due_at || 0).getTime() - new Date(b.due_at || 0).getTime());
+    const myTasks = tasks
+      .filter(
+        (t) =>
+          t.assignee_id === userId &&
+          t.status !== "done" &&
+          t.due_at &&
+          new Date(t.due_at) <= today
+      )
+      .sort((a, b) => a.priority - b.priority);
 
-  return { top3, more, upcoming };
+    const top3 = myTasks.slice(0, 3);
+    const more = myTasks.slice(3);
+    const upcoming = tasks
+      .filter(
+        (t) =>
+          t.assignee_id === userId &&
+          t.status !== "done" &&
+          t.due_at &&
+          new Date(t.due_at) > today
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.due_at || 0).getTime() - new Date(b.due_at || 0).getTime()
+      );
+
+    return { top3, more, upcoming };
+  }, [tasks, userId]);
 }
 
 export function useUsers() {

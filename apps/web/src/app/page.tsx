@@ -1,27 +1,29 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useTasks, useFilters } from "@/lib/hooks";
 import { Task, ViewMode } from "@/types";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import LoginPage from "@/components/LoginPage";
-import BoardView from "@/components/BoardView";
-import ListView from "@/components/ListView";
-import MyDayView from "@/components/MyDayView";
-import MessagingView from "@/components/MessagingView";
-import ChatPanel from "@/components/ChatPanel";
 import FilterBar from "@/components/FilterBar";
-import TaskDetailDrawer from "@/components/TaskDetailDrawer";
-import ProjectManager from "@/components/ProjectManager";
-import TeamManager from "@/components/TeamManager";
-import PushPromptBanner from "@/components/PushPromptBanner";
-import SearchPanel from "@/components/SearchPanel";
 import NotificationBell from "@/components/NotificationBell";
+import PushPromptBanner from "@/components/PushPromptBanner";
 import Toast from "@/components/Toast";
-import OnboardingModal from "@/components/OnboardingModal";
-import { shouldAutoShowOnboarding, incrementSeenCount } from "@/lib/onboarding";
 import UserMenu from "@/components/UserMenu";
+import { shouldAutoShowOnboarding, incrementSeenCount } from "@/lib/onboarding";
+
+// Lazy-load heavy view components — only the active view's code is downloaded
+const BoardView = lazy(() => import("@/components/BoardView"));
+const ListView = lazy(() => import("@/components/ListView"));
+const MyDayView = lazy(() => import("@/components/MyDayView"));
+const MessagingView = lazy(() => import("@/components/MessagingView"));
+const ChatPanel = lazy(() => import("@/components/ChatPanel"));
+const TaskDetailDrawer = lazy(() => import("@/components/TaskDetailDrawer"));
+const ProjectManager = lazy(() => import("@/components/ProjectManager"));
+const TeamManager = lazy(() => import("@/components/TeamManager"));
+const SearchPanel = lazy(() => import("@/components/SearchPanel"));
+const OnboardingModal = lazy(() => import("@/components/OnboardingModal"));
 import {
   LayoutGrid,
   List,
@@ -285,6 +287,7 @@ function AppShell() {
 
       {/* Main content */}
       <main className="max-w-[1600px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
+        <Suspense fallback={null}>
         {/* Messages view (full width, no chat sidebar) */}
         {viewMode === "messages" ? (
           <MessagingView
@@ -346,8 +349,10 @@ function AppShell() {
             </div>
           </>
         )}
+        </Suspense>
       </main>
 
+      <Suspense fallback={null}>
       {/* Task Detail Drawer */}
       <TaskDetailDrawer
         task={drawerTask}
@@ -390,6 +395,7 @@ function AppShell() {
           isAutoShown={onboardingIsAutoShown}
         />
       )}
+      </Suspense>
 
       {/* Mobile chat button (not shown on messages view) */}
       {viewMode !== "messages" && (
