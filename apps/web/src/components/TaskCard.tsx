@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import type { useSortable } from "@dnd-kit/sortable";
 import { Task, TaskStatus } from "@/types";
 import { getUserById, getProjectById, formatDue, isOverdue } from "@/lib/utils";
 import { useTaskGroupProgress } from "@/lib/hooks";
@@ -16,12 +17,14 @@ import {
   Layers,
 } from "lucide-react";
 
+type SortableReturn = ReturnType<typeof useSortable>;
+
 interface TaskCardProps {
   task: Task;
   compact?: boolean;
   showDragHandle?: boolean;
-  dragListeners?: any;
-  dragAttributes?: any;
+  dragListeners?: SortableReturn["listeners"];
+  dragAttributes?: SortableReturn["attributes"];
   onClickCard?: (task: Task) => void;
 }
 
