@@ -17,7 +17,6 @@ import {
  *   to_email?: string,
  *   to_name?: string,
  *   status?: 'draft' | 'approved',
- *   edited_by?: string,
  * }
  */
 export async function PATCH(
@@ -40,7 +39,6 @@ export async function PATCH(
       "to_email",
       "to_name",
       "status",
-      "edited_by",
     ];
 
     const updates: Record<string, unknown> = {};
@@ -98,6 +96,8 @@ export async function PATCH(
       );
     }
 
+    // Always set edited_by server-side (not from client input)
+    updates.edited_by = userId;
     updates.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -172,6 +172,7 @@ export async function DELETE(
       );
     }
 
+    console.info(`[Audit] Draft ${id} deleted by user ${userId}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Draft delete error:", error);
