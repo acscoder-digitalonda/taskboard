@@ -6,6 +6,9 @@ import {
   verifyWebhookSecret,
 } from "@/lib/api-auth";
 import { getProjectContext } from "@/lib/context";
+import { rateLimit } from "@/lib/rate-limit";
+
+const limiter = rateLimit({ windowMs: 60_000, max: 5 });
 
 const anthropic = new Anthropic({
   apiKey: process.env.TASKBOARD_ANTHROPIC_KEY,
@@ -156,6 +159,9 @@ Rules:
  * }
  */
 export async function POST(req: NextRequest) {
+  const limited = limiter.check(req);
+  if (limited) return limited;
+
   try {
     // Accept either Bearer token or webhook secret
     const userId = await getAuthenticatedUserId(req);

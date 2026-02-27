@@ -1,3 +1,4 @@
+import "@/lib/env"; // Validate env vars on first import
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { timingSafeEqual } from "crypto";

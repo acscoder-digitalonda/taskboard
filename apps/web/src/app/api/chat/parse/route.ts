@@ -4,8 +4,14 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { parseTasksWithLLM, parseTasksBasic } from "@/lib/task-parser";
+import { rateLimit } from "@/lib/rate-limit";
+
+const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 
 export async function POST(req: NextRequest) {
+  const limited = limiter.check(req);
+  if (limited) return limited;
+
   // Auth check (same pattern as email/drafts/route.ts)
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return unauthorizedResponse();

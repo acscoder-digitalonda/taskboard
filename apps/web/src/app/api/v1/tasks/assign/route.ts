@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase, verifyApiKey, forbiddenResponse } from "@/lib/api-auth";
 import { parseTaskWithLLM } from "@/lib/task-parser";
 import { uploadFileFromBuffer, uploadFileFromUrl } from "@/lib/files-server";
+import { rateLimit } from "@/lib/rate-limit";
+
+const limiter = rateLimit({ windowMs: 60_000, max: 10 });
 
 /**
  * Image attachment — either a URL to download or inline base64 data.
@@ -39,6 +42,9 @@ interface ImageInput {
  * Response: { success: true, task: { ... }, files?: [...] }
  */
 export async function POST(req: NextRequest) {
+  const limited = limiter.check(req);
+  if (limited) return limited;
+
   try {
     if (!verifyApiKey(req)) {
       return forbiddenResponse();
