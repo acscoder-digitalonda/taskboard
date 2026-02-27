@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "crypto";
+
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * Returns false for mismatched lengths without leaking timing info.
+ */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -94,7 +104,8 @@ export function verifyWebhookSecret(req: NextRequest): boolean {
     return true;
   }
   const provided = req.headers.get("x-webhook-secret");
-  return provided === secret;
+  if (!provided) return false;
+  return safeCompare(provided, secret);
 }
 
 /**
@@ -109,7 +120,8 @@ export function verifyApiKey(req: NextRequest): boolean {
     return false;
   }
   const provided = req.headers.get("x-api-key");
-  return provided === key;
+  if (!provided) return false;
+  return safeCompare(provided, key);
 }
 
 /**
