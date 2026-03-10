@@ -6,6 +6,7 @@
 -- Extend task_source enum for new sources
 ALTER TYPE task_source ADD VALUE IF NOT EXISTS 'email';
 ALTER TYPE task_source ADD VALUE IF NOT EXISTS 'openclaw';
+ALTER TYPE task_source ADD VALUE IF NOT EXISTS 'api';
 
 -- ============================================
 -- Channels (like Slack channels / group chats)
