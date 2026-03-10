@@ -316,7 +316,10 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Insert tasks ────────────────────────────────────────────
-    const inserts = validated.map((t) => ({
+    // Try "api" as created_via; if the Postgres enum doesn't have it yet, fall back to "openclaw"
+    let createdVia = "api";
+
+    const buildInserts = (via: string) => validated.map((t) => ({
       title: t.title,
       assignee_id: t.assignee_id,
       project_id: t.project_id,
@@ -324,7 +327,7 @@ export async function POST(req: NextRequest) {
       priority: t.priority,
       due_at: t.due_at,
       created_by_id: defaultUserId,
-      created_via: "api" as const,
+      created_via: via,
       drive_links: t.drive_links,
       notes: t.notes,
       client: t.client,
@@ -332,10 +335,20 @@ export async function POST(req: NextRequest) {
       group_id: groupId,
     }));
 
-    const { data: createdRows, error: insertError } = await supabase
+    let { data: createdRows, error: insertError } = await supabase
       .from("tasks")
-      .insert(inserts)
+      .insert(buildInserts(createdVia))
       .select();
+
+    // If "api" enum value doesn't exist yet, retry with "openclaw"
+    if (insertError && insertError.code === "22P02") {
+      console.warn("task_source enum missing 'api' value, falling back to 'openclaw'");
+      createdVia = "openclaw";
+      ({ data: createdRows, error: insertError } = await supabase
+        .from("tasks")
+        .insert(buildInserts(createdVia))
+        .select());
+    }
 
     if (insertError) {
       console.error("Error inserting tasks:", insertError);
