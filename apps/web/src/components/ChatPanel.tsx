@@ -171,15 +171,19 @@ export default function ChatPanel({ currentUserId, aiConnected: aiConnectedProp 
     if (pendingTasks.length === 0 || isCreating) return;
     setIsCreating(true);
 
-    // Create group if multiple tasks
+    // Create group if multiple tasks — must await so the FK exists before task inserts
     let groupId: string | undefined;
     if (pendingTasks.length > 1) {
-      const group = store.addTaskGroup(
+      const group = await store.addTaskGroup(
         originalInput,
         currentUserId,
         "app_chat",
         pendingTasks.length
       );
+      if (!group) {
+        setIsCreating(false);
+        return; // group creation failed, toast already shown
+      }
       groupId = group.id;
     }
 

@@ -724,7 +724,7 @@ export const store = {
     return () => groupListeners.delete(fn);
   },
 
-  addTaskGroup: (originalInput: string, createdById: string, createdVia: string, taskCount: number) => {
+  addTaskGroup: async (originalInput: string, createdById: string, createdVia: string, taskCount: number): Promise<TaskGroup | null> => {
     const tempId = crypto.randomUUID();
     const now = new Date().toISOString();
     const newGroup: TaskGroup = {
@@ -738,41 +738,33 @@ export const store = {
     taskGroups = [newGroup, ...taskGroups];
     emitGroups();
 
-    (async () => {
-      const { data, error } = await supabase
-        .from("task_groups")
-        .insert({
-          original_input: newGroup.original_input,
-          created_by_id: newGroup.created_by_id,
-          created_via: newGroup.created_via,
-          task_count: newGroup.task_count,
-        })
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from("task_groups")
+      .insert({
+        original_input: newGroup.original_input,
+        created_by_id: newGroup.created_by_id,
+        created_via: newGroup.created_via,
+        task_count: newGroup.task_count,
+      })
+      .select()
+      .single();
 
-      if (error) {
-        console.error("Error inserting task group:", error);
-        taskGroups = taskGroups.filter((g) => g.id !== tempId);
-        emitGroups();
-        storeErrorEmitter.emit("Failed to create task group");
-        return;
-      }
-
-      // Replace temp ID in groups
-      const realId = data.id;
-      taskGroups = taskGroups.map((g) =>
-        g.id === tempId ? { ...g, id: realId, created_at: data.created_at } : g
-      );
+    if (error) {
+      console.error("Error inserting task group:", error);
+      taskGroups = taskGroups.filter((g) => g.id !== tempId);
       emitGroups();
+      storeErrorEmitter.emit("Failed to create task group");
+      return null;
+    }
 
-      // Replace temp group_id in tasks that reference the temp ID
-      tasks = tasks.map((t) =>
-        t.group_id === tempId ? { ...t, group_id: realId } : t
-      );
-      emitTasks();
-    })();
+    // Replace temp ID in groups with real DB id
+    const realId = data.id;
+    taskGroups = taskGroups.map((g) =>
+      g.id === tempId ? { ...g, id: realId, created_at: data.created_at } : g
+    );
+    emitGroups();
 
-    return newGroup;
+    return { ...newGroup, id: realId, created_at: data.created_at };
   },
 
   deleteProject: (id: string) => {
