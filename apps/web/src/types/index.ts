@@ -48,7 +48,7 @@ export interface Task {
   due_at?: string;
   checkin_target_id?: string;
   created_by_id: string;
-  created_via: "app_chat" | "manual" | "whatsapp" | "email" | "openclaw";
+  created_via: "app_chat" | "manual" | "whatsapp" | "email" | "openclaw" | "api";
   drive_links: string[];
   notes: string[];
   sort_order?: number;
